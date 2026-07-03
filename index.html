@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pawl — Vitality Check</title>
+<style>
+  :root{
+    --ink:#1c2a24; --bg:#faf7f0; --card:#ffffff; --line:#e6e0d2;
+    --brand:#2f6b52; --brand-light:#e7f2eb; --accent:#e8a33d;
+    --warn:#c65a2e; --muted:#7a7568;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.45;}
+  .wrap{max-width:640px;margin:0 auto;padding:24px 20px 80px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  header.top .logo{font-weight:800;font-size:20px;color:var(--brand);letter-spacing:-0.02em;}
+  .progress{display:flex;gap:6px;margin-bottom:24px;}
+  .progress .seg{flex:1;height:6px;border-radius:3px;background:var(--line);}
+  .progress .seg.done{background:var(--brand);}
+  .progress .seg.current{background:var(--accent);}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-0.01em;}
+  p.lead{color:var(--muted);margin:0 0 20px;font-size:15px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:16px;}
+  .q{margin-bottom:22px;}
+  .q label.qtext{display:block;font-weight:600;margin-bottom:10px;font-size:15px;}
+  .q .hint{color:var(--muted);font-size:13px;margin-top:-6px;margin-bottom:10px;}
+  .opts{display:flex;gap:8px;flex-wrap:wrap;}
+  .opt{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:14px;user-select:none;transition:all .12s;}
+  .opt:hover{border-color:var(--brand);}
+  .opt.sel{background:var(--brand);border-color:var(--brand);color:#fff;}
+  input[type=text],input[type=number],input[type=date],select{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;color:var(--ink);
+  }
+  input[type=range]{width:100%;}
+  .bcs-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  button.primary{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:14px 20px;font-size:16px;font-weight:700;cursor:pointer;width:100%;}
+  button.primary:hover{background:#25543f;}
+  button.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand);border-radius:12px;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:10px;}
+  .species-toggle{display:flex;gap:10px;margin-bottom:18px;}
+  .species-toggle .opt{flex:1;text-align:center;font-weight:600;}
+  .unknown-toggle{margin-top:8px;font-size:13px;color:var(--muted);}
+  .unknown-toggle label{cursor:pointer;}
+
+  /* result card */
+  .result{background:linear-gradient(155deg,var(--brand) 0%,#1f4c3a 100%);color:#fff;border-radius:20px;padding:28px 24px;text-align:center;margin-bottom:18px;}
+  .result .stage{font-size:13px;text-transform:uppercase;letter-spacing:.08em;opacity:.85;margin-bottom:6px;}
+  .result .age{font-size:44px;font-weight:800;margin:4px 0;}
+  .result .band{font-size:14px;opacity:.9;}
+  .result .zone-pill{display:inline-block;margin-top:14px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.15);font-size:13px;font-weight:600;}
+  .vet-banner{background:#fbe9e2;border:1px solid var(--warn);color:#8a3a1c;border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:16px;}
+  .human-eq{font-size:13px;opacity:.85;margin-top:10px;}
+  .feline-note{font-size:12px;opacity:.8;margin-top:6px;font-style:italic;}
+  .cta-row{display:flex;gap:10px;}
+  footer.note{color:var(--muted);font-size:12px;text-align:center;margin-top:30px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ---------- Data model ---------- */
+/* Deficit score: 0 absent, 0.5 mild, 1 severe/present.
+   ponytail: no calibration dataset exists yet — expectedFI()/lifeStage() below
+   are illustrative cutoffs per the spec, not fit to Montoya/Teng tables.
+   Swap in real curves when calibration data lands; nothing else here changes. */
+
+const SCALE3 = [
+  {v:0,   label:"Not at all"},
+  {v:0.5, label:"A little"},
+  {v:1,   label:"Yes, noticeably"},
+];
+
+const PART1_CORE = [
+  {id:"p1_mobility", system:"Mobility",
+    text:{dog:"Any trouble with stairs, or jumping into the car?", cat:"Any reluctance or trouble jumping to a favorite high perch?"}},
+  {id:"p1_activity", text:{both:"Less active or playful than a year ago?"}},
+  {id:"p1_exhaustion", text:{both:"Tires quickly on walks or play, or needs longer to recover?"}},
+  {id:"p1_stiffness", text:{both:"Stiff after resting, limping, or generally slowing down?"}},
+  {id:"p1_appetite", text:{both:"Any notable increase or decrease in eating?"}},
+  {id:"p1_coat", text:{dog:"Coat duller or matting more than usual?", cat:"Coat duller, matting, or self-grooming less than usual?"}},
+  {id:"p1_vitality", text:{both:"Overall — does your pet just seem a little less spry lately?"}, isGlobal:true},
+];
+
+const PART2 = [
+  {id:"p2_vision", text:{both:"Bumping into things, or hesitant in dim light?"}},
+  {id:"p2_hearing", text:{both:"Not responding to their name or familiar sounds?"}},
+  {id:"p2_cognition", text:{both:"Staring at walls, getting \"stuck,\" or seeming confused?"}},
+  {id:"p2_sleep", text:{both:"Restless nights, pacing, or a changed sleep schedule?"}},
+  {id:"p2_interaction", text:{both:"More withdrawn, or unusually clingy compared to before?"}},
+  {id:"p2_dental", text:{both:"Bad breath, visible tartar, or trouble chewing / dropping food?"}},
+  {id:"p2_skin", text:{both:"Any new lumps, sores, or masses you can feel?"}, hint:"Just note it — this isn't a diagnosis."},
+  {id:"p2_weight_trend", text:{both:"Noticeable weight loss or gain over recent months?"}},
+];
+
+const PART3 = [
+  {id:"p3_water", text:{both:"Drinking noticeably more or less than usual?"}},
+  {id:"p3_urination", text:{both:"Urinating more often, straining, or having accidents?"}},
+  {id:"p3_continence", text:{both:"Any leaking of urine or stool, especially while resting?"}},
+  {id:"p3_digestion", text:{both:"Recurring vomiting, diarrhea, or constipation?"}},
+  {id:"p3_breathing", text:{both:"Coughing, panting at rest, or labored breathing?"}},
+  {id:"p3_exercise_tolerance", text:{dog:"Has to stop and rest on normal walks?", cat:"Avoids movement or hides more than usual?"}},
+  {id:"p3_muscle", text:{both:"Visible loss of muscle over the back or hind legs?"}},
+  {id:"p3_temperature", text:{both:"Seeks out heat, reluctant in the cold, or newly sensitive to temperature?"}},
+  {id:"p3_pain", text:{both:"Flinching when touched, reluctant to be handled, or vocalizing?"}},
+];
+
+const PART4 = [
+  {id:"p4_diagnoses", text:{both:"How many ongoing conditions has a vet diagnosed?"}, opts:[{v:0,label:"None"},{v:0.5,label:"One"},{v:1,label:"Two or more"}]},
+  {id:"p4_medications", text:{both:"How many daily medications right now?"}, opts:[{v:0,label:"None"},{v:0.5,label:"1–2"},{v:1,label:"3+"}]},
+  {id:"p4_vet_visits", text:{both:"How often have vet visits been in the last 12 months?"}, opts:[{v:0,label:"Routine / annual"},{v:0.5,label:"A few times"},{v:1,label:"Frequent or urgent"}]},
+  {id:"p4_dental_history", text:{both:"Any extractions or diagnosed periodontal disease?"}, opts:[{v:0,label:"No"},{v:0.5,label:"Mild / early"},{v:1,label:"Yes"}]},
+  {id:"p4_surgical_history", text:{both:"Any major surgeries or unresolved injuries?"}, opts:[{v:0,label:"None"},{v:0.5,label:"Minor, resolved"},{v:1,label:"Major or unresolved"}]},
+  {id:"p4_bloodwork", text:{both:"(Optional) If your vet has run bloodwork — any values flagged abnormal?"}, opts:[{v:0,label:"Normal / none flagged"},{v:1,label:"Abnormal flagged"}], optional:true},
+  {id:"p4_organ_findings", text:{both:"(Optional) Any vet-noted findings — heart murmur, kidney values, etc.?"}, opts:[{v:0,label:"None noted"},{v:1,label:"Yes, noted"}], optional:true},
+  {id:"p4_owner_concern", text:{both:"Anything else about them that's been worrying you?"}, opts:SCALE3},
+];
+
+/* Reproductive status detail is captured as a life-table modifier per the spec
+   ("age modifier", not a deficit) — informational only, not part of the FI denominator. */
+
+/* ---------- Age / FI model (illustrative — see calibration TODO above) ---------- */
+
+function dogSizeClass(kg){
+  if (kg < 10) return "small";
+  if (kg < 25) return "medium";
+  if (kg < 40) return "large";
+  return "giant";
+}
+const DOG_SENIOR_ONSET = {small:10, medium:10, large:8, giant:6};
+
+function lifeStage(species, chronAge, weightKg){
+  if (species === "cat") {
+    if (chronAge < 7) return "young";
+    if (chronAge < 11) return "middle";
+    return "senior";
+  }
+  const seniorAge = DOG_SENIOR_ONSET[dogSizeClass(weightKg)];
+  const middleAge = seniorAge * 0.6;
+  if (chronAge < middleAge) return "young";
+  if (chronAge < seniorAge) return "middle";
+  return "senior";
+}
+
+const EXPECTED_FI = {young:0.08, middle:0.16, senior:0.24};
+const STAGE_LABEL = {young:"Young adult", middle:"Middle-aged", senior:"Senior"};
+
+function expectedFI(species, chronAge, weightKg){
+  return EXPECTED_FI[lifeStage(species, chronAge, weightKg)];
+}
+
+/* SE table straight from the spec (n:8/16/25/33 -> band years). Linear
+   interpolation between the given points; flat past the ends. */
+const BAND_TABLE = [[8,3],[16,2],[25,1.2],[33,0.8]];
+function bandYears(n){
+  if (n <= BAND_TABLE[0][0]) return BAND_TABLE[0][1];
+  for (let i=0;i<BAND_TABLE.length-1;i++){
+    const [n0,b0] = BAND_TABLE[i], [n1,b1] = BAND_TABLE[i+1];
+    if (n <= n1) return b0 + (b1-b0)*(n-n0)/(n1-n0);
+  }
+  return BAND_TABLE[BAND_TABLE.length-1][1];
+}
+
+function fiZone(fi){
+  if (fi < 0.12) return {label:"Thriving", vet:false};
+  if (fi <= 0.24) return {label:"Steady", vet:false};
+  if (fi <= 0.4) return {label:"Needs a little attention", vet:false};
+  return {label:"Talk to your vet", vet:true};
+}
+
+function catHumanEquivalent(catAge){
+  if (catAge < 1.5) return null;
+  return Math.round(4.14*catAge + 15);
+}
+
+function bcsToDeficit(bcs){
+  const d = Math.abs(bcs - 4.5);
+  if (d <= 0.5) return 0;
+  if (d <= 1.5) return 0.5;
+  return 1;
+}
+
+const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // used only when DOB unknown
+
+/* ---------- App state ---------- */
+const state = {
+  step:"baseline", // baseline -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4
+  baseline:{species:"dog", name:"", breed:"", weight:20, sexNeuter:"male-neutered", dobKnown:true, dob:"", ageGuess:"adult", bcs:5},
+  answers:{}, // id -> score
+};
+
+function chronAge(){
+  const b = state.baseline;
+  if (b.dobKnown && b.dob){
+    const ms = Date.parse(b.dob);
+    if (!isNaN(ms)) return Math.max(0.1, (Date.now() - ms) / (365.25*24*3600*1000));
+  }
+  return AGE_GUESS[b.ageGuess] ?? 5;
+}
+
+function answeredScores(ids){
+  return ids.map(id=>state.answers[id]).filter(v => v !== undefined);
+}
+
+function computeResult(partNumber){
+  const idsByPart = {
+    1: PART1_CORE.map(q=>q.id).concat(["p1_bcs"]),
+    2: PART2.map(q=>q.id),
+    3: PART3.map(q=>q.id),
+    4: PART4.map(q=>q.id),
+  };
+  let allIds = [];
+  for (let p=1;p<=partNumber;p++) allIds = allIds.concat(idsByPart[p]);
+  const scores = answeredScores(allIds);
+  const n = scores.length;
+  const observedFI = n ? scores.reduce((a,b)=>a+b,0)/n : 0;
+
+  const species = state.baseline.species;
+  const weight = state.baseline.weight;
+  const age = chronAge();
+  const eFI = expectedFI(species, age, weight);
+  const ratio = eFI > 0 ? observedFI/eFI : 1;
+  let center = age * ratio;
+
+  let band = bandYears(n);
+  if (species === "cat") band *= 1.3; // Sofia/Priya: feline aging science lags dogs — widen the band
+
+  const stage = lifeStage(species, center, weight);
+  const zone = fiZone(observedFI);
+
+  return {
+    n, observedFI, center: Math.max(0.1, center),
+    low: Math.max(0.1, center-band), high: center+band,
+    stage, zone, species,
+    humanEq: species==="cat" ? catHumanEquivalent(center) : null,
+  };
+}
+
+/* ---------- Render ---------- */
+const app = document.getElementById("app");
+
+function speciesText(q){
+  if (q.text.both) return q.text.both;
+  return q.text[state.baseline.species];
+}
+
+function optRow(id, opts, hint){
+  const cur = state.answers[id];
+  return `<div class="opts" data-qid="${id}">` +
+    opts.map(o => `<div class="opt ${cur===o.v?'sel':''}" data-val="${o.v}">${o.label}</div>`).join("") +
+    `</div>` + (hint?`<div class="hint">${hint}</div>`:"");
+}
+
+function questionBlock(q, opts){
+  return `<div class="q">
+    <label class="qtext">${speciesText(q)}</label>
+    ${q.hint?`<div class="hint">${q.hint}</div>`:""}
+    ${optRow(q.id, opts || SCALE3)}
+  </div>`;
+}
+
+function progressHTML(activeIdx){
+  const total = 5; // baseline+part1 counted as one visual stage, then 2,3,4, then done
+  let segs = "";
+  for (let i=0;i<4;i++){
+    const cls = i < activeIdx ? "done" : (i===activeIdx ? "current" : "");
+    segs += `<div class="seg ${cls}"></div>`;
+  }
+  return `<div class="progress">${segs}</div>`;
+}
+
+function render(){
+  const s = state.step;
+  if (s === "baseline") return renderBaseline();
+  if (s === "part1") return renderPart("part1");
+  if (s === "part2") return renderPart("part2");
+  if (s === "part3") return renderPart("part3");
+  if (s === "part4") return renderPart("part4");
+  if (s.startsWith("result")) return renderResult(parseInt(s.replace("result","")));
+}
+
+function renderBaseline(){
+  const b = state.baseline;
+  app.innerHTML = `
+    <header class="top"><div class="logo">🐾 Pawl</div></header>
+    ${progressHTML(0)}
+    <h1>Let's see how spry ${b.name || "your pet"} really is.</h1>
+    <p class="lead">90 seconds, a few quick observations, and you'll get a vitality estimate — not a diagnosis.</p>
+    <div class="card">
+      <div class="species-toggle">
+        <div class="opt ${b.species==='dog'?'sel':''}" data-species="dog">🐶 Dog</div>
+        <div class="opt ${b.species==='cat'?'sel':''}" data-species="cat">🐱 Cat</div>
+      </div>
+      <div class="q"><label class="qtext">Name</label>
+        <input type="text" id="f-name" value="${b.name}" placeholder="Bella"></div>
+      <div class="q"><label class="qtext">Breed (or best guess)</label>
+        <input type="text" id="f-breed" value="${b.breed}" placeholder="Labrador mix"></div>
+      <div class="row2">
+        <div class="q"><label class="qtext">Adult weight (kg)</label>
+          <input type="number" id="f-weight" value="${b.weight}" min="0.5" step="0.5"></div>
+        <div class="q"><label class="qtext">Sex & neuter status</label>
+          <select id="f-sex">
+            <option value="male-intact" ${b.sexNeuter==='male-intact'?'selected':''}>Male, intact</option>
+            <option value="male-neutered" ${b.sexNeuter==='male-neutered'?'selected':''}>Male, neutered</option>
+            <option value="female-intact" ${b.sexNeuter==='female-intact'?'selected':''}>Female, intact</option>
+            <option value="female-spayed" ${b.sexNeuter==='female-spayed'?'selected':''}>Female, spayed</option>
+          </select></div>
+      </div>
+      <div class="q">
+        <label class="qtext">Date of birth</label>
+        <input type="date" id="f-dob" value="${b.dob}" ${b.dobKnown?'':'disabled'}>
+        <div class="unknown-toggle">
+          <label><input type="checkbox" id="f-dob-unknown" ${b.dobKnown?'':'checked'}> I don't know — estimate from life stage</label>
+        </div>
+        ${!b.dobKnown ? `
+        <div class="q" style="margin-top:10px;">
+          <select id="f-ageguess">
+            <option value="puppy" ${b.ageGuess==='puppy'?'selected':''}>Puppy / kitten</option>
+            <option value="young" ${b.ageGuess==='young'?'selected':''}>Young adult</option>
+            <option value="adult" ${b.ageGuess==='adult'?'selected':''}>Adult</option>
+            <option value="senior_guess" ${b.ageGuess==='senior_guess'?'selected':''}>Looks senior</option>
+          </select>
+        </div>` : ""}
+      </div>
+      <div class="q">
+        <label class="qtext">Body condition (photo-guided, 1–9)</label>
+        <div class="hint">Ribs easily felt with slight fat cover, visible waist = ideal (4–5).</div>
+        <input type="range" id="f-bcs" min="1" max="9" step="1" value="${b.bcs}">
+        <div class="bcs-scale"><span>1 · too thin</span><span>5 · ideal</span><span>9 · obese</span></div>
+      </div>
+    </div>
+    <button class="primary" id="next-baseline">Start the vitality check →</button>
+  `;
+
+  document.querySelectorAll("[data-species]").forEach(el=>el.onclick=()=>{
+    state.baseline.species = el.dataset.species; render();
+  });
+  document.getElementById("f-name").oninput = e=> state.baseline.name = e.target.value;
+  document.getElementById("f-breed").oninput = e=> state.baseline.breed = e.target.value;
+  document.getElementById("f-weight").oninput = e=> state.baseline.weight = parseFloat(e.target.value)||0;
+  document.getElementById("f-sex").onchange = e=> state.baseline.sexNeuter = e.target.value;
+  document.getElementById("f-dob").oninput = e=> state.baseline.dob = e.target.value;
+  document.getElementById("f-dob-unknown").onchange = e=>{ state.baseline.dobKnown = !e.target.checked; render(); };
+  const ageGuessEl = document.getElementById("f-ageguess");
+  if (ageGuessEl) ageGuessEl.onchange = e=> state.baseline.ageGuess = e.target.value;
+  document.getElementById("f-bcs").oninput = e=>{
+    state.baseline.bcs = parseInt(e.target.value);
+    state.answers.p1_bcs = bcsToDeficit(state.baseline.bcs);
+  };
+  state.answers.p1_bcs = bcsToDeficit(state.baseline.bcs);
+
+  document.getElementById("next-baseline").onclick = ()=>{ state.step="part1"; render(); };
+}
+
+const PART_META = {
+  part1: {items:PART1_CORE, title:"Round 1 — the basics", idx:0, num:1},
+  part2: {items:PART2, title:"Round 2 — senses & mind", idx:1, num:2},
+  part3: {items:PART3, title:"Round 3 — internal signals", idx:2, num:3},
+  part4: {items:PART4, title:"Round 4 — history & context", idx:3, num:4},
+};
+
+function renderPart(key){
+  const meta = PART_META[key];
+  app.innerHTML = `
+    <header class="top"><div class="logo">🐾 Pawl</div></header>
+    ${progressHTML(meta.idx)}
+    <h1>${meta.title}</h1>
+    <p class="lead">${meta.num===1 ? "Answer what you can — skip anything you're unsure of." : "Every extra answer sharpens the estimate."}</p>
+    <div class="card">
+      ${meta.items.map(q => questionBlock(q, q.opts)).join("")}
+    </div>
+    <button class="primary" id="next-part">See ${meta.num===1?"my estimate":"the sharpened estimate"} →</button>
+  `;
+  app.querySelectorAll(".opts").forEach(row=>{
+    row.querySelectorAll(".opt").forEach(o=>{
+      o.onclick = ()=>{
+        state.answers[row.dataset.qid] = parseFloat(o.dataset.val);
+        render();
+      };
+    });
+  });
+  document.getElementById("next-part").onclick = ()=>{ state.step = "result"+meta.num; render(); };
+}
+
+function renderResult(partNumber){
+  const r = computeResult(partNumber);
+  const name = state.baseline.name || "Your pet";
+  const nextPart = partNumber+1;
+  const isLast = partNumber===4;
+  app.innerHTML = `
+    <header class="top"><div class="logo">🐾 Pawl</div></header>
+    ${progressHTML(Math.min(partNumber,3))}
+    ${r.zone.vet ? `<div class="vet-banner">💬 ${name}'s answers suggest it's worth a check-in with your vet soon. This isn't a diagnosis — just a nudge to get eyes on it.</div>` : ""}
+    <div class="result">
+      <div class="stage">${STAGE_LABEL[r.stage]}</div>
+      <div class="age">${r.low.toFixed(1)}–${r.high.toFixed(1)} yrs</div>
+      <div class="band">${name} ages like a ${STAGE_LABEL[r.stage].toLowerCase()} ${r.species}</div>
+      ${r.humanEq ? `<div class="human-eq">≈ ${r.humanEq} in human years</div>` : ""}
+      <div class="zone-pill">${r.zone.label}</div>
+      ${r.species==="cat" ? `<div class="feline-note">Feline estimate — the science here is still maturing, so this range runs a bit wider.</div>` : ""}
+    </div>
+    <p class="lead" style="text-align:center;">Based on ${r.n} observations · confidence sharpens with each round.</p>
+    ${!isLast ? `
+      <div class="cta-row">
+        <button class="primary" id="next-round">Sharpen this estimate — round ${nextPart} →</button>
+      </div>
+      <button class="ghost" id="stop-here">I'm happy with this estimate</button>
+    ` : `<p class="lead" style="text-align:center;">That's the full picture — nice work.</p>`}
+    <footer class="note">Wellness estimate only. Not a diagnosis or life-expectancy prediction.</footer>
+  `;
+  if (!isLast){
+    document.getElementById("next-round").onclick = ()=>{ state.step="part"+nextPart; render(); };
+    document.getElementById("stop-here").onclick = ()=>{ /* stays on card */ };
+  }
+}
+
+render();
+</script>
+</body>
+</html>
