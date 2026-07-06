@@ -70,7 +70,7 @@
    scoring model and its calibration TODO. */
 const { dogSizeClass, lifeStage, fiZone, catHumanEquivalent, bcsToDeficit,
         estimatePhysiologicalAge, scoreActivityMinutes, classifyDelta,
-        bandYears } = window.FrailtyModel;
+        bandYears, AGE_GUESS } = window.FrailtyModel;
 
 const SCALE3 = [
   {v:0,   label:"Not at all"},
@@ -131,8 +131,6 @@ const PART4 = [
 /* ---------- Age / FI model — see frailty-model.js ---------- */
 
 const STAGE_LABEL = {young:"Young adult", middle:"Middle-aged", senior:"Senior"};
-
-const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // used only when DOB unknown
 
 /* ---------- App state ---------- */
 const state = {

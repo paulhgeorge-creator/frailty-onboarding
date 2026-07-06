@@ -159,11 +159,13 @@ function bcsToDeficit(bcs){
   return 1;
 }
 
+const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // used only when DOB unknown
+
 return {
   dogSizeClass, DOG_SENIOR_ONSET, lifeStage,
   ageFraction, expectedFIContinuous, breedModifier,
   estimatePhysiologicalAge, classifyDelta, scoreActivityMinutes,
-  bandYears, fiZone, catHumanEquivalent, bcsToDeficit,
+  bandYears, fiZone, catHumanEquivalent, bcsToDeficit, AGE_GUESS,
   FRAILTY_MODEL_CONFIG, ACTIVITY_MINUTES_TABLE,
 };
 
