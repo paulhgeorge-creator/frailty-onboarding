@@ -2,5 +2,5 @@ flask
 flask-cors
 pillow
 numpy
-# tensorflow — only needed once AGE_MODEL_WEIGHTS points at a real trained
+# tensorflow - only needed once AGE_MODEL_WEIGHTS points at a real trained
 # model (see README.md). Not required to run the service today.

@@ -1,6 +1,6 @@
 /* Pure frailty/physiological-age scoring functions.
    UMD-style export: works as <script src="frailty-model.js"> in index.html
-   and via require() from Node tests — no build step, no dependencies. */
+   and via require() from Node tests - no build step, no dependencies. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.FrailtyModel = factory();
@@ -16,7 +16,7 @@ function dogSizeClass(kg){
 }
 /* Senior-onset ages: midpoints of real benchmarks (small 10-12, medium 8-10,
    large 7-8, giant 5-6 yr). Larger dogs also lose ~1 month of lifespan per
-   2kg body mass — that's a lifespan-shortening rate, not a senior-onset-age
+   2kg body mass - that's a lifespan-shortening rate, not a senior-onset-age
    rate, so it's cited only as qualitative support for the size ordering,
    not fit into a formula (would be spurious precision). */
 const DOG_SENIOR_ONSET = {small:11, medium:9, large:7.5, giant:5.5};
@@ -34,20 +34,32 @@ function lifeStage(species, chronAge, weightKg){
   return "senior";
 }
 
+/* Display-only 4-bucket stage (puppy/young/middle/senior) for the result
+   page. Does NOT feed the expected-FI curve - that still runs on lifeStage()
+   above untouched. 1-year puppy/kitten cutoff is a common general convention,
+   not size-stratified like the rest of this model; it's a display label, not
+   a scoring input, so the simplification is lower-stakes here. */
+const PUPPY_CUTOFF_YEARS = 1;
+
+function lifeStageDisplay(species, chronAge, weightKg){
+  if (chronAge < PUPPY_CUTOFF_YEARS) return "puppy";
+  return lifeStage(species, chronAge, weightKg);
+}
+
 /* ---------- FRAILTY MODEL CONFIG ---------- */
 /* EXPECTED_FI_ANCHORS are now Banzato et al. 2019's real reported mean FI by
    age band (young 2-6y=0.08, middle 7-10y=0.11, old 10+y=0.23; population
-   mean 0.14) — no longer placeholders. Banzato also reports an approximately
+   mean 0.14) - no longer placeholders. Banzato also reports an approximately
    linear FI-vs-age relationship (b=0.016, Spearman rho=0.51), which is why
    piecewise-linear interpolation between anchors is a literature-consistent
    shape rather than an invented curve.
    ponytail: BETA, MAX_DELTA_YEARS, BRACHY/CHONDRO_BREED_FI_MODIFIER,
    CAT_DELTA_DAMPENING, and the activity-minutes table are still placeholder
-   constants — no public source gives a numeric FI-delta-to-years coefficient,
+   constants - no public source gives a numeric FI-delta-to-years coefficient,
    breed-modifier magnitude, or feline FI-age curve. Swap in real numbers if
    an internal Pawl dataset produces them.
    NOTE: README.md's "Teng et al. 2024" vs. a previously-cited "McMillan et
-   al. 2024" remains unresolved — neither could be verified as a real
+   al. 2024" remains unresolved - neither could be verified as a real
    canine/feline frailty-index paper via public search. Calibrating off
    Banzato 2019 in the meantime rather than guessing. */
 const FRAILTY_MODEL_CONFIG = {
@@ -99,7 +111,7 @@ const BRACHY_BREEDS = [
 ];
 
 /* Chondrodystrophic breeds (FGF4-driven early disc degeneration) carry a
-   real, distinct structural risk — not the same claim as "breed-typical
+   real, distinct structural risk - not the same claim as "breed-typical
    trait misread as a deficit," but treated the same way here (raise the
    expected-FI bar) since no separate scoring lever exists yet. Overlaps
    with BRACHY_BREEDS (Shih Tzu, Pekingese) are resolved by taking the max
@@ -138,7 +150,7 @@ function classifyDelta(delta, threshold){
 /* ---------- activity-minutes scoring (Problem 3) ---------- */
 /* ponytail: literature check (PDSA, Merck, AAHA, plus a direct check for
    minutes-to-years coefficients) confirms no size/breed-stratified numeric
-   activity standard exists publicly — only a general "30min-2hr/day" range
+   activity standard exists publicly - only a general "30min-2hr/day" range
    by energy level, and validated proxies like timed mobility trials, not a
    minutes threshold. Size-class defaults stay illustrative placeholders
    within that general range. Swap in real thresholds if a real standard or
@@ -151,7 +163,7 @@ const ACTIVITY_MINUTES_TABLE = {
 /* Breed-specific overrides, keyed by lowercase substring, checked before the
    size-class default. Sourced from general breed-standard energy-level
    descriptions (AKC/breed-club characterizations of "high energy" vs
-   "low energy" breeds), not a controlled study — same placeholder tier as
+   "low energy" breeds), not a controlled study - same placeholder tier as
    the size-class table above, just breed-extensible. Extend this object
    (no logic changes needed) as real per-breed data becomes available. */
 const ACTIVITY_BREED_OVERRIDES = {
@@ -182,6 +194,53 @@ function scoreActivityMinutes(species, minutes, weightKg, breedText){
   return 1;
 }
 
+/* ---------- health multiplier (completion-page metric) ---------- */
+/* observedFI / expectedFI-for-age - the same two numbers estimatePhysiologicalAge()
+   already computes, just expressed as a ratio instead of folded into an age
+   shift. 1.0 = exactly typical for age; below 1 = fewer deficits than typical;
+   above 1 = more than typical. Clamped to a display-sane range so a very
+   young pet with a tiny expectedFI denominator can't produce a wild number.
+   This is a DIFFERENT metric from the page-2 aging-pace percentage
+   (deltaPercentOfAge) - that one stays percentage-framed per product
+   direction; this multiplier is the completion page's own distinct number,
+   not a reversal of that earlier decision. */
+function healthMultiplier(observedFI, expectedFI){
+  if (!expectedFI) return 1;
+  const raw = observedFI / expectedFI;
+  return Math.max(0.4, Math.min(2, +raw.toFixed(2)));
+}
+
+/* ---------- food & activity balance (completion-page metric) ---------- */
+/* Each input follows the same 0 (ideal) .. 1 (concerning) deficit convention
+   used everywhere else in this model - activityDeficit is scoreActivityMinutes()
+   output as-is; portionScore/treatsScore are simple 0/0.5/1 owner-reported
+   selects. Expressed as a 0-100 "balance" so it reads as a soft relative
+   measure, not a hard limit. */
+function foodActivityBalance({activityDeficit, portionScore, treatsScore}){
+  const scores = [activityDeficit, portionScore, treatsScore].filter(s => s != null);
+  if (!scores.length) return null;
+  const avg = scores.reduce((a,b)=>a+b,0) / scores.length;
+  return Math.round(100 * (1 - avg));
+}
+
+/* Same balance score, re-expressed as a 0.75x-1.75x multiplier instead of a
+   percentage - 1.0x sits at the middle, no scary hard limit either end.
+   Same 1=more-concerning/below-1=better convention as healthMultiplier(),
+   just derived from food/activity signals instead of the frailty answers. */
+function foodEquationMultiplier(balancePct){
+  if (balancePct == null) return 1;
+  return +(1.75 - (balancePct/100)).toFixed(2);
+}
+
+/* Reframes the same balance score as a plain-language comparison ("better
+   balanced than about N% of pets") - explicitly a comparable, illustrative
+   figure, not drawn from a real population dataset (none exists for this
+   synthetic combined score). */
+function foodBalancePercentile(balancePct){
+  if (balancePct == null) return null;
+  return Math.round(balancePct);
+}
+
 /* ---------- misc (unchanged from original) ---------- */
 
 const BAND_TABLE = [[8,3],[16,2],[25,1.2],[33,0.8]];
@@ -199,6 +258,21 @@ function fiZone(fi){
   if (fi <= 0.24) return {label:"Steady", vet:false};
   if (fi <= 0.4) return {label:"Needs a little attention", vet:false};
   return {label:"Talk to your vet", vet:true};
+}
+
+/* 0-100 "health score" for a WHOOP-style badge - reuses fiZone's own FI
+   breakpoints (0.12/0.24/0.4, the 0.24 one validated against a cited FI>0.25
+   elevated-mortality-risk threshold - see README) rather than inventing a
+   second, competing scale. Piecewise-linear between them. */
+const HEALTH_SCORE_ANCHORS = [[0,100],[0.12,85],[0.24,65],[0.4,40],[0.6,15],[1,0]];
+function healthScore(fi){
+  const a = HEALTH_SCORE_ANCHORS;
+  if (fi <= a[0][0]) return a[0][1];
+  for (let i=0;i<a.length-1;i++){
+    const [f0,s0]=a[i], [f1,s1]=a[i+1];
+    if (fi<=f1) return Math.round(s0 + (s1-s0)*(fi-f0)/(f1-f0));
+  }
+  return a[a.length-1][1];
 }
 
 function catHumanEquivalent(catAge){
@@ -227,8 +301,8 @@ function bcsToDeficit(bcs){
 /* Anchored on real cited prevalence stats: 59% of dogs / 61% of cats are
    overweight-or-obese (roughly the BCS>=6 population), 22% of dogs / 33% of
    cats are obese (BCS 8-9). BCS 6 and 8 anchors are those real numbers; BCS
-   7 and 9 are linearly interpolated/extrapolated between them — flagged,
-   not independently sourced. BCS<=5 (ideal or underweight) returns null —
+   7 and 9 are linearly interpolated/extrapolated between them - flagged,
+   not independently sourced. BCS<=5 (ideal or underweight) returns null -
    no percentile framing where a pet isn't in the overweight tail. */
 const OVERWEIGHT_PERCENTILE_ANCHORS = {
   dog: {6:59, 8:22, 9:8},
@@ -252,7 +326,7 @@ function overweightPercentile(species, bcs){
 /* ---------- confidence-weighted age fusion ---------- */
 /* Combines whatever age signals are available (exact DOB, an owner years-only
    guess, a size-based prior, a photo-model estimate) into one age value via a
-   confidence-weighted average — never a category label, never a single model
+   confidence-weighted average - never a category label, never a single model
    deciding alone. Pure function: callers supply {years, confidence} signals;
    a signal with confidence 0 (e.g. an unreachable/untrained photo model)
    contributes nothing, which is how "don't rely on image estimation alone"
@@ -267,7 +341,7 @@ function fuseAge(signals){
 
 /* ---------- aging-pace delta as a percentage ---------- */
 /* delta expressed as % of chronological age, e.g. delta=1.2yr at chronAge=8
-   -> "15% faster/slower than typical for their age" — a real ratio of the
+   -> "15% faster/slower than typical for their age" - a real ratio of the
    model's own numbers, not an invented percentage. */
 function deltaPercentOfAge(delta, chronAge){
   if (!chronAge) return 0;
@@ -275,7 +349,7 @@ function deltaPercentOfAge(delta, chronAge){
 }
 
 /* ---------- body condition chart (real 9-point WSAVA/Purina-style scale) ---------- */
-/* imageHook is a stable key for the UI to look up a placeholder slot by —
+/* imageHook is a stable key for the UI to look up a placeholder slot by -
    drop real photos in later keyed by these strings, no logic changes needed. */
 const BCS_CHART = {
   dog: [
@@ -305,12 +379,14 @@ const BCS_CHART = {
 const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // legacy fallback map; seniorGuessAge() is preferred for the size-aware case
 
 return {
-  dogSizeClass, DOG_SENIOR_ONSET, lifeStage,
+  dogSizeClass, DOG_SENIOR_ONSET, lifeStage, lifeStageDisplay, PUPPY_CUTOFF_YEARS,
   ageFraction, expectedFIContinuous, breedModifier, CHONDRODYSTROPHIC_BREEDS,
   estimatePhysiologicalAge, classifyDelta, scoreActivityMinutes, seniorGuessAge,
   getActivityMinutesThreshold, ACTIVITY_BREED_OVERRIDES,
   overweightPercentile, fuseAge, deltaPercentOfAge, BCS_CHART,
-  bandYears, fiZone, catHumanEquivalent, dogHumanEquivalent, bcsToDeficit, AGE_GUESS,
+  bandYears, fiZone, healthScore, healthMultiplier, foodActivityBalance,
+  foodEquationMultiplier, foodBalancePercentile,
+  catHumanEquivalent, dogHumanEquivalent, bcsToDeficit, AGE_GUESS,
   FRAILTY_MODEL_CONFIG, ACTIVITY_MINUTES_TABLE,
 };
 

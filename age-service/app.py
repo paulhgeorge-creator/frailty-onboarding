@@ -1,5 +1,5 @@
 """Age-estimation service. Real Flask server, real endpoint contract, no
-trained model behind it yet — see README.md."""
+trained model behind it yet - see README.md."""
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image, UnidentifiedImageError

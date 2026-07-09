@@ -6,14 +6,14 @@
    Manual QA in the browser:
      1. Open index.html, open devtools console.
      2. Paste the contents of loadProfile below (or `require` this file if
-        running via a bundler-less <script> — this file uses the same UMD
+        running via a bundler-less <script> - this file uses the same UMD
         guard as frailty-model.js).
      3. Run: PetProfiles.applyProfile(state, PetProfiles.PROFILES[0], FrailtyModel)
      4. Run: state.step = "result4"; render();
      5. Read the result card for that profile.
 
    Automated smoke test: node test/pet-profiles.smoke.js runs every profile
-   through computeResult-equivalent logic and prints a one-line summary —
+   through computeResult-equivalent logic and prints a one-line summary -
    useful for eyeballing the full spread before a stakeholder review. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -22,7 +22,7 @@
 
 const PROFILES = [
   {
-    name: "Bulldog — breed-typical, otherwise stable",
+    name: "Bulldog - breed-typical, otherwise stable",
     notes: "Breathing/skin issues are breed-normal, not decline. Should NOT read prematurely old.",
     baseline: {species:"dog", name:"Winston", breed:"English Bulldog", weight:22, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"adult", bcs:5},
     activityMinutesPerDay: 35,
@@ -34,7 +34,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Dachshund — low activity owner calls \"normal for him\"",
+    name: "Dachshund - low activity owner calls \"normal for him\"",
     notes: "Owner self-report would've scored this fine; objective minutes should surface a real signal.",
     baseline: {species:"dog", name:"Otto", breed:"Dachshund", weight:8, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"adult", bcs:6},
     activityMinutesPerDay: 10,
@@ -46,8 +46,8 @@ const PROFILES = [
     },
   },
   {
-    name: "Great Dane — genuinely declining at ~8yo",
-    notes: "Real joint/muscle decline. Should read senior + elevated frailty — proves the fix isn't one-directional.",
+    name: "Great Dane - genuinely declining at ~8yo",
+    notes: "Real joint/muscle decline. Should read senior + elevated frailty - proves the fix isn't one-directional.",
     baseline: {species:"dog", name:"Duke", breed:"Great Dane", weight:65, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"senior_guess", bcs:4},
     activityMinutesPerDay: 15,
     answers: {
@@ -58,7 +58,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Healthy senior — small dog (Chihuahua)",
+    name: "Healthy senior - small dog (Chihuahua)",
     notes: "Should stay near chronological age, not collapse young.",
     baseline: {species:"dog", name:"Pepper", breed:"Chihuahua", weight:4, sexNeuter:"female-spayed", dobKnown:false, ageGuess:"senior_guess", bcs:5},
     activityMinutesPerDay: 25,
@@ -70,7 +70,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Healthy senior — large dog (Labrador)",
+    name: "Healthy senior - large dog (Labrador)",
     notes: "Should stay near chronological age, not collapse young.",
     baseline: {species:"dog", name:"Bailey", breed:"Labrador", weight:32, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"senior_guess", bcs:5},
     activityMinutesPerDay: 40,
@@ -82,7 +82,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Healthy senior — cat",
+    name: "Healthy senior - cat",
     notes: "Should stay near chronological age; wider band expected (feline uncertainty).",
     baseline: {species:"cat", name:"Luna", breed:"Domestic Shorthair", weight:4.5, sexNeuter:"female-spayed", dobKnown:false, ageGuess:"senior_guess", bcs:5},
     activityMinutesPerDay: 15,
@@ -95,7 +95,7 @@ const PROFILES = [
   },
   {
     name: "Young unhealthy dog (Beagle, ~2yo)",
-    notes: "Should still read elevated frailty despite youth — proves the fix isn't one-directional.",
+    notes: "Should still read elevated frailty despite youth - proves the fix isn't one-directional.",
     baseline: {species:"dog", name:"Rusty", breed:"Beagle", weight:12, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"young", bcs:6},
     activityMinutesPerDay: 10,
     answers: {
@@ -106,7 +106,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Unknown DOB — senior-looking cat, estimated age",
+    name: "Unknown DOB - senior-looking cat, estimated age",
     notes: "Confirms the age-guess fallback path still works with the new formula.",
     baseline: {species:"cat", name:"Simba", breed:"Maine Coon", weight:4, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"senior_guess", bcs:5},
     activityMinutesPerDay: 20,
@@ -118,7 +118,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Typical healthy adult dog — sanity baseline",
+    name: "Typical healthy adult dog - sanity baseline",
     notes: "Nothing wrong anywhere. Should land close to chronological age, Thriving zone, small band.",
     baseline: {species:"dog", name:"Max", breed:"Labrador", weight:28, sexNeuter:"male-neutered", dobKnown:false, ageGuess:"adult", bcs:5},
     activityMinutesPerDay: 50,
@@ -130,7 +130,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Senior cat — vet-flagged, needs attention",
+    name: "Senior cat - vet-flagged, needs attention",
     notes: "Multiple systemic signals plus vet-confirmed findings. Should route to the vet banner.",
     baseline: {species:"cat", name:"Whiskers", breed:"Domestic Shorthair", weight:3.8, sexNeuter:"female-spayed", dobKnown:false, ageGuess:"senior_guess", bcs:3},
     activityMinutesPerDay: 8,
@@ -142,7 +142,7 @@ const PROFILES = [
     },
   },
   {
-    name: "Fit senior dog — high activity, staying spry",
+    name: "Fit senior dog - high activity, staying spry",
     notes: "Contrast case for stakeholder review: genuinely fit senior should read 'aging slower than typical'.",
     baseline: {species:"dog", name:"Scout", breed:"Border Collie", weight:18, sexNeuter:"female-spayed", dobKnown:false, ageGuess:"senior_guess", bcs:4},
     activityMinutesPerDay: 60,

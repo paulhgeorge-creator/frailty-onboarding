@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pawl — Vitality Check</title>
+<title>Pawl - Vitality Check</title>
 <style>
   :root{
     --ink:#1c2a24; --bg:#faf7f0; --card:#ffffff; --line:#e6e0d2;
@@ -67,18 +67,56 @@
 
   /* result card */
   .result{background:linear-gradient(155deg,var(--brand) 0%,#1f4c3a 100%);color:#fff;border-radius:20px;padding:28px 24px;text-align:center;margin-bottom:18px;}
-  .result .age{font-size:44px;font-weight:800;margin:4px 0;}
-  .result .range-sub{font-size:13px;opacity:.8;margin-bottom:6px;}
-  .result .zone-pill,.result .percentile-pill{display:inline-block;margin-top:10px;margin-right:6px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.15);font-size:13px;font-weight:600;}
-  .result .percentile-pill{background:rgba(232,163,61,.35);}
+  .stage-pill{display:inline-block;padding:5px 14px;border-radius:999px;background:rgba(255,255,255,.15);font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin-bottom:12px;}
+  .result-headline{font-size:22px;margin:0 0 8px;letter-spacing:-0.01em;}
+  .stage-explain{font-size:13px;opacity:.85;margin:0 0 20px;max-width:440px;margin-left:auto;margin-right:auto;}
   .vet-banner{background:#fbe9e2;border:1px solid var(--warn);color:#8a3a1c;border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:16px;}
-  .human-eq{font-size:13px;opacity:.85;margin-top:10px;}
-  .explanation{font-size:14px;opacity:.92;margin-top:14px;}
-  .delta-indicator{font-size:13px;opacity:.85;margin-top:6px;}
-  .feline-note{font-size:12px;opacity:.8;margin-top:6px;font-style:italic;}
-  .confidence-note{font-size:11px;opacity:.65;margin-top:10px;}
+  .feline-note{font-size:12px;opacity:.8;margin-top:14px;font-style:italic;}
   .cta-row{display:flex;gap:10px;}
   footer.note{color:var(--muted);font-size:12px;text-align:center;margin-top:30px;}
+
+  /* primary stats: Pet Age / Human Age */
+  .stats-row{display:flex;justify-content:center;gap:28px;margin-bottom:22px;flex-wrap:wrap;}
+  .stat-block{min-width:120px;}
+  .stat-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:2px;}
+  .stat-value{font-size:40px;font-weight:800;line-height:1.1;}
+  .stat-value .unit{font-size:16px;font-weight:600;opacity:.8;}
+  .stat-note{font-size:11px;opacity:.75;max-width:150px;margin:4px auto 0;}
+
+  /* WHOOP-style health score */
+  .health-score-card{display:flex;align-items:center;justify-content:center;gap:16px;background:rgba(0,0,0,.15);border-radius:16px;padding:16px 18px;text-align:left;}
+  .score-ring{--pct:0;--ring-color:#4caf7d;width:80px;height:80px;border-radius:50%;flex-shrink:0;
+    background:conic-gradient(var(--ring-color) calc(var(--pct)*1%), rgba(255,255,255,.18) 0);
+    display:flex;align-items:center;justify-content:center;}
+  .score-ring-inner{width:62px;height:62px;border-radius:50%;background:#1f4c3a;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;}
+  .score-title{font-size:13px;font-weight:700;}
+  .score-zone{font-size:12px;opacity:.85;margin-bottom:4px;}
+  .score-caption{font-size:12px;opacity:.85;max-width:220px;}
+
+  /* watch-out-for / what-helps */
+  .insight-card{text-align:left;}
+  .insight-title{font-weight:700;font-size:15px;margin-bottom:10px;}
+  .insight-card ul{margin:0;padding-left:20px;}
+  .insight-card li{font-size:14px;color:var(--ink);margin-bottom:6px;line-height:1.4;}
+
+  /* completion page */
+  .complete-badge{display:inline-block;background:var(--brand-light);color:var(--brand);font-weight:700;font-size:13px;padding:6px 14px;border-radius:999px;margin-bottom:14px;}
+  .multiplier-card{padding:24px;}
+  .multiplier-card .stat-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.8;}
+  .multiplier-value{font-size:48px;font-weight:800;margin:6px 0;}
+  .multiplier-explain{font-size:13px;opacity:.9;max-width:440px;margin:6px auto 10px;}
+  .multiplier-tone{font-size:13px;opacity:.95;font-weight:600;}
+  .section-title{font-weight:700;font-size:15px;margin-bottom:10px;}
+  .bcs-summary{margin:0 0 4px;}
+  .bcs-desc{color:var(--muted);font-size:13px;margin:0;}
+  .soft-percentile{font-size:13px;color:var(--ink);margin:10px 0 0;}
+  .balance-summary{margin-top:16px;}
+  .balance-label{font-size:13px;font-weight:600;margin-bottom:6px;}
+  .balance-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;}
+  .balance-fill{height:100%;background:var(--brand);border-radius:999px;transition:width .2s;}
+  .balance-copy{font-size:13px;color:var(--muted);margin-top:6px;}
+  .food-equation{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
 </style>
 </head>
 <body>
@@ -89,9 +127,11 @@
 <script>
 /* ---------- Data model ---------- */
 /* Deficit score: 0 absent, 0.5 mild, 1 severe/present.
-   Age/FI model lives in frailty-model.js — see that file for the interim
+   Age/FI model lives in frailty-model.js - see that file for the interim
    scoring model and its calibration TODO. */
-const { lifeStage, fiZone, catHumanEquivalent, dogHumanEquivalent, bcsToDeficit,
+const { lifeStage, lifeStageDisplay, fiZone, healthScore, healthMultiplier, foodActivityBalance,
+        foodEquationMultiplier, foodBalancePercentile,
+        catHumanEquivalent, dogHumanEquivalent, bcsToDeficit,
         estimatePhysiologicalAge, scoreActivityMinutes, classifyDelta,
         bandYears, AGE_GUESS, overweightPercentile, fuseAge, deltaPercentOfAge,
         BCS_CHART } = window.FrailtyModel;
@@ -99,7 +139,7 @@ const { lifeStage, fiZone, catHumanEquivalent, dogHumanEquivalent, bcsToDeficit,
 const KG_PER_LB = 0.45359237;
 
 /* Real veterinary reference charts (WSAVA/Daily Paws for dogs; Bjornvad/
-   Laflamme via APOP for cats) — dropped in per the BCS-chart hook points
+   Laflamme via APOP for cats) - dropped in per the BCS-chart hook points
    already built into the BCS step. */
 const BCS_REFERENCE_CHARTS = { dog: "assets/bcs-chart-dog.png", cat: "assets/bcs-chart-cat.webp" };
 
@@ -114,12 +154,12 @@ const PART1_CORE = [
     text:{dog:"Any trouble with stairs, or jumping into the car?", cat:"Any reluctance or trouble jumping to a favorite high perch?"}},
   {id:"p1_activity", type:"minutes",
     text:{both:"On a typical day, about how many minutes of walking or active play does your pet get?"},
-    hint:"Rough estimate is fine — total minutes across the whole day."},
+    hint:"Rough estimate is fine - total minutes across the whole day."},
   {id:"p1_exhaustion", text:{both:"Tires quickly on walks or play, or needs longer to recover?"}},
   {id:"p1_stiffness", text:{both:"Does your pet need a moment to get up after resting, or seem stiff for the first few steps?"}},
   {id:"p1_appetite", text:{both:"Any notable increase or decrease in eating?"}},
   {id:"p1_coat", text:{dog:"Coat duller or matting more than usual?", cat:"Coat duller, matting, or self-grooming less than usual?"}},
-  {id:"p1_vitality", text:{both:"Overall — does your pet just seem a little less spry lately?"}, isGlobal:true},
+  {id:"p1_vitality", text:{both:"Overall - does your pet just seem a little less spry lately?"}, isGlobal:true},
 ];
 
 const PART2 = [
@@ -129,7 +169,7 @@ const PART2 = [
   {id:"p2_sleep", text:{both:"Restless nights, pacing, or a changed sleep schedule?"}},
   {id:"p2_interaction", text:{both:"More withdrawn, or unusually clingy compared to before?"}},
   {id:"p2_dental", text:{both:"Bad breath, visible tartar, or trouble chewing / dropping food?"}},
-  {id:"p2_skin", text:{both:"Any new lumps, sores, or masses you can feel?"}, hint:"Just note it — this isn't a diagnosis."},
+  {id:"p2_skin", text:{both:"Any new lumps, sores, or masses you can feel?"}, hint:"Just note it - this isn't a diagnosis."},
   {id:"p2_weight_trend", text:{both:"Noticeable weight loss or gain over recent months?"}},
 ];
 
@@ -151,17 +191,17 @@ const PART4 = [
   {id:"p4_vet_visits", text:{both:"How often have vet visits been in the last 12 months?"}, opts:[{v:0,label:"Routine / annual"},{v:0.5,label:"A few times"},{v:1,label:"Frequent or urgent"}]},
   {id:"p4_dental_history", text:{both:"Any extractions or diagnosed periodontal disease?"}, opts:[{v:0,label:"No"},{v:0.5,label:"Mild / early"},{v:1,label:"Yes"}]},
   {id:"p4_surgical_history", text:{both:"Any major surgeries or unresolved injuries?"}, opts:[{v:0,label:"None"},{v:0.5,label:"Minor, resolved"},{v:1,label:"Major or unresolved"}]},
-  {id:"p4_bloodwork", text:{both:"(Optional) If your vet has run bloodwork — any values flagged abnormal?"}, opts:[{v:0,label:"Normal / none flagged"},{v:1,label:"Abnormal flagged"}], optional:true},
-  {id:"p4_organ_findings", text:{both:"(Optional) Any vet-noted findings — heart murmur, kidney values, etc.?"}, opts:[{v:0,label:"None noted"},{v:1,label:"Yes, noted"}], optional:true},
+  {id:"p4_bloodwork", text:{both:"(Optional) If your vet has run bloodwork - any values flagged abnormal?"}, opts:[{v:0,label:"Normal / none flagged"},{v:1,label:"Abnormal flagged"}], optional:true},
+  {id:"p4_organ_findings", text:{both:"(Optional) Any vet-noted findings - heart murmur, kidney values, etc.?"}, opts:[{v:0,label:"None noted"},{v:1,label:"Yes, noted"}], optional:true},
   {id:"p4_owner_concern", text:{both:"Anything else about them that's been worrying you?"}, opts:SCALE3},
 ];
 
 /* Reproductive status detail is captured as a life-table modifier per the spec
-   ("age modifier", not a deficit) — informational only, not part of the FI denominator. */
+   ("age modifier", not a deficit) - informational only, not part of the FI denominator. */
 
 /* ---------- App state ---------- */
 const state = {
-  step:"baseline", // baseline -> bcs -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4
+  step:"baseline", // baseline -> bcs -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4 -> complete
   baseline:{
     species:"dog", name:"", breed:"",
     weightValue:20, weightUnit:"kg",
@@ -172,6 +212,13 @@ const state = {
     photoFile:null, photoEstimate:null,
   },
   answers:{}, // id -> score
+  followup:{
+    exerciseMinutes:"", // seeded from p1_activity once the complete page first renders
+    mealsPerDay:"",
+    foodType:"",
+    portionScore:null, // 0 (about right) / 0.5 (a bit more) / 1 (a lot more) - same deficit convention as everything else
+    treatsScore:null,
+  },
 };
 
 function weightKg(){
@@ -191,10 +238,10 @@ function dobAgeYears(){
   return Math.max(0.02, ms / (365.25*24*3600*1000));
 }
 
-/* Confidence-weighted fusion — the single seam where DOB, an owner years-only
+/* Confidence-weighted fusion - the single seam where DOB, an owner years-only
    guess, a photo estimate, and a last-resort population prior all combine
    into one age value. A photo signal with confidence 0 (today's untrained
-   backend) contributes nothing — this is how "don't rely on image
+   backend) contributes nothing - this is how "don't rely on image
    estimation alone" is enforced structurally, not just in copy. */
 function computeFinalAge(){
   const b = state.baseline;
@@ -231,20 +278,23 @@ function computeResult(partNumber){
   const weight = weightKg();
   const breed = state.baseline.breed;
   const { years: age, confidence: ageConfidence } = computeFinalAge();
-  const {center, delta} = estimatePhysiologicalAge({species, chronAge: age, weightKg: weight, breed, observedFI});
+  const {center, delta, eFI} = estimatePhysiologicalAge({species, chronAge: age, weightKg: weight, breed, observedFI});
 
   let band = bandYears(n);
-  if (species === "cat") band *= 1.3; // Sofia/Priya: feline aging science lags dogs — widen the band
+  if (species === "cat") band *= 1.3; // Sofia/Priya: feline aging science lags dogs - widen the band
 
-  const stage = lifeStage(species, age, weight); // internal bucket, feeds the expected-FI curve — not shown as a UI label
+  const stage = lifeStage(species, age, weight); // feeds the expected-FI curve
+  const stageDisplay = lifeStageDisplay(species, age, weight); // 4-bucket puppy/young/middle/senior, UI-only
   const zone = fiZone(observedFI);
+  const score = healthScore(observedFI);
+  const multiplier = healthMultiplier(observedFI, eFI);
   const deltaCategory = classifyDelta(delta);
   const overweightPct = overweightPercentile(species, state.baseline.bcs);
 
   return {
     n, observedFI, center, delta, deltaCategory, chronAge: age, ageConfidence, breed,
     low: Math.max(0.1, center-band), high: center+band,
-    stage, zone, species, overweightPct,
+    stage, stageDisplay, zone, score, multiplier, species, overweightPct,
     humanEq: species==="cat" ? catHumanEquivalent(center) : dogHumanEquivalent(center),
   };
 }
@@ -296,14 +346,15 @@ function render(){
   if (s === "part3") return renderPart("part3");
   if (s === "part4") return renderPart("part4");
   if (s.startsWith("result")) return renderResult(parseInt(s.replace("result","")));
+  if (s === "complete") return renderComplete();
 }
 
 function photoStatusLine(b){
   if (!b.photoFile) return "No photo selected yet.";
   const est = b.photoEstimate;
-  if (!est || est.status === "checking") return `Selected: ${b.photoFile.name} — analyzing…`;
-  if (est.confidence > 0) return `Selected: ${b.photoFile.name} — estimated ~${Math.round(est.years)} yrs (used as one signal, not the final answer).`;
-  return `Selected: ${b.photoFile.name} — no confident read yet (photo model isn't trained), other signals used instead.`;
+  if (!est || est.status === "checking") return `Selected: ${b.photoFile.name} - analyzing…`;
+  if (est.confidence > 0) return `Selected: ${b.photoFile.name} - estimated ~${Math.round(est.years)} yrs (used as one signal, not the final answer).`;
+  return `Selected: ${b.photoFile.name} - no confident read yet (photo model isn't trained), other signals used instead.`;
 }
 
 function renderBaseline(){
@@ -317,7 +368,7 @@ function renderBaseline(){
     <header class="top"><div class="logo">🐾 Pawl</div></header>
     ${progressHTML(0)}
     <h1>Let's see how spry ${b.name || "your pet"} really is.</h1>
-    <p class="lead">90 seconds, a few quick observations, and you'll get a vitality estimate — not a diagnosis.</p>
+    <p class="lead">90 seconds, a few quick observations, and you'll get a vitality estimate - not a diagnosis.</p>
     <div class="card">
       <div class="species-toggle">
         <div class="opt ${b.species==='dog'?'sel':''}" data-species="dog">🐶 Dog</div>
@@ -357,14 +408,14 @@ function renderBaseline(){
           <input type="number" id="f-dob-year" placeholder="Year" min="${currentYear-30}" max="${currentYear}" value="${b.dobYear}">
         </div>` : `
         <div class="q" style="margin-top:10px;margin-bottom:0;">
-          <label class="qtext">Best guess — age in years</label>
+          <label class="qtext">Best guess - age in years</label>
           <input type="number" id="f-years-only" min="0" step="0.5" value="${b.yearsOnlyAge}" placeholder="e.g. 6">
-          <div class="hint">Rough is fine — a photo below, plus your answers, help sharpen it.</div>
+          <div class="hint">Rough is fine - a photo below, plus your answers, help sharpen it.</div>
         </div>`}
       </div>
       <div class="q" style="margin-bottom:0;">
         <label class="qtext">Photo (optional)</label>
-        <div class="hint">Helps refine the age estimate — combined with the info above, never used alone.</div>
+        <div class="hint">Helps refine the age estimate - combined with the info above, never used alone.</div>
         <input type="file" id="f-photo" accept="image/*">
         <div class="photo-status">${photoStatusLine(b)}</div>
       </div>
@@ -405,7 +456,7 @@ function renderBaseline(){
   };
 
   document.getElementById("next-baseline").onclick = ()=>{
-    // A photo was provided — skip the manual body-condition step. BCS then
+    // A photo was provided - skip the manual body-condition step. BCS then
     // stays at its default (5, ideal) and p1_bcs is never scored, same
     // "skipped items don't count" rule already used elsewhere in the flow.
     state.step = b.photoFile ? "part1" : "bcs";
@@ -421,7 +472,7 @@ function renderBCS(){
     <header class="top"><div class="logo">🐾 Pawl</div></header>
     ${progressHTML(0)}
     <h1>How's ${b.name || "your pet"}'s body condition?</h1>
-    <p class="lead">Compare against the chart below — ribs, waist, and profile are the tells, not the scale.</p>
+    <p class="lead">Compare against the chart below - ribs, waist, and profile are the tells, not the scale.</p>
     <div class="card">
       <div class="bcs-chart-preview" data-img-hook="${cur.imageHook}">
         <img class="bcs-chart-thumb" id="bcs-chart-thumb" src="${BCS_REFERENCE_CHARTS[b.species]}" alt="${b.species} body condition reference chart">
@@ -432,7 +483,7 @@ function renderBCS(){
         <div class="bcs-scale"><span>1 · too thin</span><span>5 · ideal</span><span>9 · obese</span></div>
       </div>
       <div class="bcs-readout">
-        <strong>${b.bcs} — ${cur.label}</strong>
+        <strong>${b.bcs} - ${cur.label}</strong>
         <p>${cur.desc}</p>
       </div>
     </div>
@@ -449,10 +500,10 @@ function renderBCS(){
 }
 
 const PART_META = {
-  part1: {items:PART1_CORE, title:"Round 1 — the basics", idx:0, num:1},
-  part2: {items:PART2, title:"Round 2 — senses & mind", idx:1, num:2},
-  part3: {items:PART3, title:"Round 3 — internal signals", idx:2, num:3},
-  part4: {items:PART4, title:"Round 4 — history & context", idx:3, num:4},
+  part1: {items:PART1_CORE, title:"Round 1 - the basics", idx:0, num:1},
+  part2: {items:PART2, title:"Round 2 - senses & mind", idx:1, num:2},
+  part3: {items:PART3, title:"Round 3 - internal signals", idx:2, num:3},
+  part4: {items:PART4, title:"Round 4 - history & context", idx:3, num:4},
 };
 
 function renderPart(key){
@@ -461,7 +512,7 @@ function renderPart(key){
     <header class="top"><div class="logo">🐾 Pawl</div></header>
     ${progressHTML(meta.idx)}
     <h1>${meta.title}</h1>
-    <p class="lead">${meta.num===1 ? "Answer what you can — skip anything you're unsure of." : "Every extra answer sharpens the estimate."}</p>
+    <p class="lead">${meta.num===1 ? "Answer what you can - skip anything you're unsure of." : "Every extra answer sharpens the estimate."}</p>
     <div class="card">
       ${meta.items.map(q => questionBlock(q, q.opts)).join("")}
     </div>
@@ -481,7 +532,7 @@ function renderPart(key){
       state.raw = state.raw || {};
       state.raw[inp.dataset.qid] = isNaN(raw) ? undefined : raw;
       state.answers[inp.dataset.qid] = scoreActivityMinutes(state.baseline.species, raw, weightKg(), state.baseline.breed);
-      // deliberately no render() here — re-rendering innerHTML on every
+      // deliberately no render() here - re-rendering innerHTML on every
       // keystroke would blow away focus/cursor mid-typing (same reason
       // f-name/f-breed/f-weight above don't re-render either).
     };
@@ -491,54 +542,329 @@ function renderPart(key){
 
 /* Aging-pace copy is percentage-based (delta as % of chronological age) per
    product direction, replacing the earlier multiplier/qualitative-only
-   framing. Still never shows a raw FI percentage — only this derived ratio. */
+   framing. Still never shows a raw FI percentage - only this derived ratio. */
 function deltaCopy(delta, chronAge, category){
   if (category === "typical") return "Aging right in line with expectations for their age.";
   const pct = Math.abs(deltaPercentOfAge(delta, chronAge));
   const dir = category === "slower" ? "slower" : "faster";
   const tone = category === "slower" ? "nice work." : "nothing urgent, just a good nudge to keep supporting them.";
-  return `Aging about ${pct}% ${dir} than typical for their age — ${tone}`;
+  return `Aging about ${pct}% ${dir} than typical for their age - ${tone}`;
+}
+
+const STAGE_ICON = {puppy:"🍼", young:"⚡", middle:"🌿", senior:"🍂"};
+
+function stageLabelText(stage, species){
+  if (stage === "puppy") return species === "cat" ? "Kitten" : "Puppy";
+  return {young:"Young", middle:"Middle-aged", senior:"Senior"}[stage];
+}
+
+const STAGE_EXPLAIN = {
+  puppy: "The fastest-changing stage of life - bones, brain, and lifelong habits are all still forming right now.",
+  young: "Physically mature and in their prime - the easiest window to lock in habits that pay off for years.",
+  middle: "Aging starts quietly here, often before it's visible day-to-day - small proactive changes now matter most.",
+  senior: "Their body needs more support than before - comfort, mobility, and catching issues early are the priority.",
+};
+
+/* Species/stage-tailored care content - general veterinary-informed
+   guidance, not a clinical protocol (the existing "wellness estimate, not a
+   diagnosis" footer still applies). Dynamic entries from
+   personalizedInsights() below get prepended based on this pet's actual
+   answers, so the list isn't purely static/generic. */
+const STAGE_CONTENT = {
+  puppy: {
+    dog: {
+      watch: ["Growth-plate injuries from too much high-impact exercise or jumping", "Gaps opening up in the vaccination or parasite-prevention schedule", "Fear/socialization windows closing without enough varied, positive exposure"],
+      help: ["Keep exercise short and gentle - skip forced runs or big jumps until they're fully grown", "Stay on schedule with vaccines, deworming, and vet checkups", "Start positive-reinforcement training and socialization now - it's easiest at this age"],
+    },
+    cat: {
+      watch: ["Gaps opening up in the vaccination or parasite-prevention schedule", "Risky climbing or exploring before coordination fully develops", "Litter-box or scratching habits forming the wrong way early on"],
+      help: ["Kitten-proof the home - secure cords, small objects, and high ledges", "Stay on schedule with vaccines and parasite prevention", "Handle and socialize gently across varied situations now"],
+    },
+  },
+  young: {
+    dog: {
+      watch: ["Weight creeping up as growth slows but feeding stays puppy-level", "Under-exercising a body that's still at peak energy", "Dental tartar starting to build unnoticed"],
+      help: ["Switch to adult-formula food at the right portion for their size", "Keep daily exercise consistent - this is the highest-energy window", "Start a dental routine (brushing or dental chews) before problems build"],
+    },
+    cat: {
+      watch: ["Indoor weight gain from a mostly sedentary lifestyle", "Dental tartar starting to build unnoticed", "Stress-related litter-box issues"],
+      help: ["Keep portions in check, especially after spay/neuter", "Give daily play sessions to burn energy and prevent boredom", "Start a dental routine now - easier than catching up later"],
+    },
+  },
+  middle: {
+    dog: {
+      watch: ["Weight gain as metabolism quietly slows", "Early joint stiffness or reduced stamina on walks", "Dental or organ-function changes that don't show obvious symptoms yet"],
+      help: ["Track body condition closely, adjusting food or exercise before it becomes a problem", "Add joint-friendly exercise (swimming, controlled walks) and ask about supplements", "Start annual bloodwork now if you haven't - it catches changes early"],
+    },
+    cat: {
+      watch: ["Weight gain, especially if activity has dropped", "Early kidney or dental changes that are easy to miss", "Reduced grooming leading to coat or skin issues"],
+      help: ["Keep an eye on water intake and litter box habits", "Keep play sessions regular to maintain muscle and mobility", "Ask your vet about baseline bloodwork if you haven't already"],
+    },
+  },
+  senior: {
+    dog: {
+      watch: ["Joint pain and reduced mobility", "Cognitive changes - confusion, disrupted sleep, pacing", "Organ issues (kidney, heart) that can hide behind normal-looking behavior"],
+      help: ["Support mobility with ramps, orthopedic bedding, and vet-guided exercise or joint supplements", "Keep a predictable daily routine to ease cognitive stress", "Move to twice-yearly vet checkups - it catches issues earlier"],
+    },
+    cat: {
+      watch: ["Weight loss - common in cats and easy to miss early", "Reduced mobility making litter box access harder", "Kidney or thyroid issues becoming more common"],
+      help: ["Watch weight and appetite closely - unexplained loss is the #1 early flag", "Make litter boxes and favorite spots easier to reach (lower sides, ramps, steps)", "Move to twice-yearly vet checkups with bloodwork"],
+    },
+  },
+};
+
+/* Merges the static species/stage content with a couple of dynamic entries
+   pulled straight from this pet's own answers (vet-flag zone, overweight
+   percentile) - capped at 3 each so nothing gets cluttered or duplicated. */
+function personalizedInsights(r){
+  const base = STAGE_CONTENT[r.stageDisplay][r.species];
+  let watch = base.watch.slice();
+  let help = base.help.slice();
+  if (r.zone.vet) watch = ["A few of today's answers are worth flagging to your vet soon", ...watch].slice(0,3);
+  if (r.overweightPct != null) help = ["Body condition is the highest-impact lever right now - small portion and activity changes add up fast", ...help].slice(0,3);
+  return {watch, help};
+}
+
+function scoreRingColor(score){
+  if (score >= 70) return "#4caf7d";
+  if (score >= 40) return "#e8a33d";
+  return "#c65a2e";
 }
 
 function renderResult(partNumber){
   const r = computeResult(partNumber);
   const name = state.baseline.name || "Your pet";
-  const breedLabel = (r.breed && r.breed.trim()) || (r.species==="dog" ? "dog" : "cat");
-  const explanationLine = `${name} is aging like a typical ${r.low.toFixed(0)}–${r.high.toFixed(0)}-year-old ${breedLabel} — ${r.zone.label} zone.`;
   const nextPart = partNumber+1;
   const isLast = partNumber===4;
-  // Headline is an approximate single figure (rounded, "~" prefixed) with the
-  // range kept as a secondary line — a deliberate softening of the earlier
-  // "never a bare point-value age" guardrail, not a silent drop of it.
-  const headlineAge = Math.round(r.center);
+  // Single fused figure, no range shown - a deliberate product-direction
+  // change (this pass) from the earlier range-plus-headline display.
+  // Under 1yr, "0 yrs" reads as broken for a puppy/kitten - show months instead.
+  const ageDisplay = r.center < 1
+    ? {value: Math.max(1, Math.round(r.center*12)), unit: " mo"}
+    : {value: Math.round(r.center), unit: " yrs"};
+  const stageText = stageLabelText(r.stageDisplay, r.species);
+  const { watch, help } = personalizedInsights(r);
+  const ringColor = scoreRingColor(r.score);
+  // Uncertainty is reflected in tone, not a raw confidence percentage.
+  const ageSoftener = r.ageConfidence >= 0.9 ? "" : `<div class="stat-note">Estimated - sharpens as you answer more</div>`;
+
   app.innerHTML = `
     <header class="top"><div class="logo">🐾 Pawl</div></header>
     ${progressHTML(Math.min(partNumber,3))}
-    ${r.zone.vet ? `<div class="vet-banner">💬 ${name}'s answers suggest it's worth a check-in with your vet soon. This isn't a diagnosis — just a nudge to get eyes on it.</div>` : ""}
+    ${r.zone.vet ? `<div class="vet-banner">💬 ${name}'s answers suggest it's worth a check-in with your vet soon. This isn't a diagnosis - just a nudge to get eyes on it.</div>` : ""}
     <div class="result">
-      <div class="age">~${headlineAge} yrs</div>
-      <div class="range-sub">likely range: ${r.low.toFixed(1)}–${r.high.toFixed(1)} yrs</div>
-      ${r.humanEq ? `<div class="human-eq">≈ ${r.humanEq} in human years</div>` : ""}
-      <div class="zone-pill">${r.zone.label}</div>
-      ${r.overweightPct != null ? `<div class="percentile-pill">Top ${r.overweightPct}% most overweight for ${r.species}s</div>` : ""}
-      <div class="explanation">${explanationLine}</div>
-      <div class="delta-indicator">${deltaCopy(r.delta, r.chronAge, r.deltaCategory)}</div>
-      ${r.species==="cat" ? `<div class="feline-note">Feline estimate — the science here is still maturing, so this range runs a bit wider.</div>` : ""}
-      <div class="confidence-note">Age input confidence: ${Math.round(r.ageConfidence*100)}%${r.ageConfidence>=1?' (exact birth date)':''}</div>
+      <div class="stage-pill">${STAGE_ICON[r.stageDisplay]} ${stageText} stage</div>
+      <h1 class="result-headline">${name} is in the ${stageText} stage</h1>
+      <p class="stage-explain">${STAGE_EXPLAIN[r.stageDisplay]}</p>
+
+      <div class="stats-row">
+        <div class="stat-block">
+          <div class="stat-label">Pet Age</div>
+          <div class="stat-value">${ageDisplay.value}<span class="unit">${ageDisplay.unit}</span></div>
+          ${ageSoftener}
+        </div>
+        ${r.humanEq ? `
+        <div class="stat-block">
+          <div class="stat-label">Human Age</div>
+          <div class="stat-value">${r.humanEq}<span class="unit"> yrs</span></div>
+          <div class="stat-note">What a human would be at the same biological stage - not ${name}'s real age</div>
+        </div>` : ""}
+      </div>
+
+      <div class="health-score-card">
+        <div class="score-ring" style="--pct:${r.score};--ring-color:${ringColor}">
+          <div class="score-ring-inner">${r.score}</div>
+        </div>
+        <div class="score-meta">
+          <div class="score-title">Health Score</div>
+          <div class="score-zone">${r.zone.label}</div>
+          <div class="score-caption">${deltaCopy(r.delta, r.chronAge, r.deltaCategory)}</div>
+        </div>
+      </div>
+      ${r.species==="cat" ? `<div class="feline-note">Feline estimate - the science here is still maturing, so this reads a touch less precise.</div>` : ""}
     </div>
-    <p class="lead" style="text-align:center;">Based on ${r.n} observations · confidence sharpens with each round.</p>
+
+    <div class="card insight-card">
+      <div class="insight-title">⚠️ Watch out for</div>
+      <ul>${watch.map(w=>`<li>${w}</li>`).join("")}</ul>
+    </div>
+    <div class="card insight-card">
+      <div class="insight-title">✅ What helps</div>
+      <ul>${help.map(h=>`<li>${h}</li>`).join("")}</ul>
+    </div>
+
+    <p class="lead" style="text-align:center;">This combines their age, body condition, and today's answers - it gets sharper with each round (${r.n} observations so far).</p>
     ${!isLast ? `
       <div class="cta-row">
-        <button class="primary" id="next-round">Sharpen this estimate — round ${nextPart} →</button>
+        <button class="primary" id="next-round">Sharpen this estimate - round ${nextPart} →</button>
       </div>
       <button class="ghost" id="stop-here">I'm happy with this estimate</button>
-    ` : `<p class="lead" style="text-align:center;">That's the full picture — nice work.</p>`}
+    ` : `
+      <div class="cta-row">
+        <button class="primary" id="finish-setup">Finish setting up ${name}'s profile →</button>
+      </div>
+    `}
     <footer class="note">Wellness estimate only. Not a diagnosis or life-expectancy prediction.</footer>
   `;
   if (!isLast){
     document.getElementById("next-round").onclick = ()=>{ state.step="part"+nextPart; render(); };
-    document.getElementById("stop-here").onclick = ()=>{ /* stays on card */ };
+    document.getElementById("stop-here").onclick = ()=>{ state.step="complete"; render(); };
+  } else {
+    document.getElementById("finish-setup").onclick = ()=>{ state.step="complete"; render(); };
   }
+}
+
+/* ---------- Completion page (page 3) ---------- */
+
+function currentFoodActivityBalance(){
+  const b = state.baseline, f = state.followup;
+  const minutes = parseFloat(f.exerciseMinutes);
+  const activityDeficit = Number.isFinite(minutes) ? scoreActivityMinutes(b.species, minutes, weightKg(), b.breed) : null;
+  return foodActivityBalance({activityDeficit, portionScore:f.portionScore, treatsScore:f.treatsScore});
+}
+
+function balanceCopy(pct){
+  if (pct == null) return "Add a bit of info below to see how food and activity balance out.";
+  if (pct >= 80) return `${pct}% - well matched to their size and energy needs.`;
+  if (pct >= 55) return `${pct}% - solid overall, with a little room to tighten up.`;
+  return `${pct}% - a good opportunity to adjust portions or activity, nothing drastic.`;
+}
+
+/* Reframes the "Top N% most overweight" percentile as a comparison, not a
+   ranking someone can "lose" - avoids the judged-by-a-leaderboard feel while
+   staying factually equivalent. */
+function percentileSoftCopy(pct, species){
+  if (pct == null) return null;
+  return `Fuller-bodied than roughly ${100-pct}% of ${species}s their size - worth keeping an eye on, nothing alarming.`;
+}
+
+function followupOptRow(field, opts){
+  const cur = state.followup[field];
+  return `<div class="opts" data-field="${field}">` +
+    opts.map(o => `<div class="opt ${cur===o.v?'sel':''}" data-val="${o.v}">${o.label}</div>`).join("") +
+    `</div>`;
+}
+
+function foodEquationCopy(bal, species){
+  if (bal == null) return "Add a bit of info above to see the food equation.";
+  const mult = foodEquationMultiplier(bal);
+  const pct = foodBalancePercentile(bal);
+  return `${mult}x - better-balanced than about ${pct}% of ${species}s (0.75x-1.75x range, 1.0x is the middle, no hard cutoff either end).`;
+}
+
+function updateBalanceUI(){
+  const bal = currentFoodActivityBalance();
+  const fill = document.getElementById("balance-fill");
+  const copy = document.getElementById("balance-copy");
+  const equation = document.getElementById("food-equation-copy");
+  if (fill) fill.style.width = (bal ?? 0) + "%";
+  if (copy) copy.textContent = balanceCopy(bal);
+  if (equation) equation.textContent = foodEquationCopy(bal, state.baseline.species);
+}
+
+function renderComplete(){
+  const b = state.baseline;
+  const f = state.followup;
+  const name = b.name || "Your pet";
+  if (!f.exerciseMinutes && state.raw && state.raw.p1_activity != null){
+    f.exerciseMinutes = String(state.raw.p1_activity); // carry the onboarding answer forward instead of asking twice
+  }
+  const r = computeResult(4); // safe regardless of how many rounds were actually completed - unanswered ids just don't count
+  const chart = BCS_CHART[b.species];
+  const bcsEntry = chart.find(c=>c.bcs===b.bcs) || chart[4];
+  const balance = currentFoodActivityBalance();
+  const multiplierTone = r.multiplier <= 1.15
+    ? "Right around typical for their age - a good, neutral baseline."
+    : r.multiplier <= 1.4
+      ? "A touch above typical - nothing urgent, just a signal to keep supporting them."
+      : "Noticeably above typical - worth folding into your next vet conversation.";
+
+  app.innerHTML = `
+    <header class="top"><div class="logo">🐾 Pawl</div></header>
+    <div class="complete-badge">✅ Profile complete</div>
+    <h1>${name}'s profile is set up</h1>
+    <p class="lead">This is the start, not the finish - Pawl keeps refining ${name}'s picture as you add more over time. Extra assessments can be layered in later without redoing any of this.</p>
+
+    <div class="result multiplier-card">
+      <div class="stat-label">Health Multiplier</div>
+      <div class="multiplier-value">${r.multiplier.toFixed(2)}x</div>
+      <p class="multiplier-explain">This compares ${name}'s current signals to what's typical for their age - 1.0x is the neutral baseline. It's a wellness and longevity-potential signal, not a lifespan guarantee.</p>
+      <div class="multiplier-tone">${multiplierTone}</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Body condition</div>
+      <p class="bcs-summary"><strong>${b.bcs} - ${bcsEntry.label}</strong></p>
+      <p class="bcs-desc">${bcsEntry.desc}</p>
+      ${r.overweightPct != null ? `<p class="soft-percentile">${percentileSoftCopy(r.overweightPct, b.species)}</p>` : ""}
+      <p class="hint" style="margin-top:10px;margin-bottom:0;">Body condition is its own signal - related to the health multiplier above, but not the same thing as their age or life stage.</p>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Wearable connection</div>
+      <p class="hint">Optional. Connecting a wearable lets Pawl use real activity data instead of estimates, sharpening the health multiplier and food/activity balance over time.</p>
+      <button class="ghost" id="connect-wearable">Connect a wearable</button>
+      <div class="hint" id="wearable-status" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Activity & food</div>
+      <div class="row2">
+        <div class="q">
+          <label class="qtext">Exercise (min/day)</label>
+          <input type="number" id="f-exercise" min="0" step="5" value="${f.exerciseMinutes}">
+        </div>
+        <div class="q">
+          <label class="qtext">Meals per day</label>
+          <input type="number" id="f-meals" min="1" step="1" value="${f.mealsPerDay}">
+        </div>
+      </div>
+      <div class="q">
+        <label class="qtext">What do they eat?</label>
+        <select id="f-food-type">
+          <option value="">Pick one</option>
+          <option value="kibble" ${f.foodType==='kibble'?'selected':''}>Dry kibble</option>
+          <option value="wet" ${f.foodType==='wet'?'selected':''}>Wet food</option>
+          <option value="raw" ${f.foodType==='raw'?'selected':''}>Raw or fresh</option>
+          <option value="homemade" ${f.foodType==='homemade'?'selected':''}>Homemade</option>
+          <option value="mixed" ${f.foodType==='mixed'?'selected':''}>Mixed</option>
+        </select>
+      </div>
+      <div class="q">
+        <label class="qtext">Portion size vs. what's recommended</label>
+        ${followupOptRow("portionScore", [{v:0,label:"About right"},{v:0.5,label:"A bit more"},{v:1,label:"A lot more"}])}
+      </div>
+      <div class="q" style="margin-bottom:0;">
+        <label class="qtext">Treats & extras</label>
+        ${followupOptRow("treatsScore", [{v:0,label:"Rarely"},{v:0.5,label:"Sometimes"},{v:1,label:"Often"}])}
+      </div>
+      <div class="balance-summary">
+        <div class="balance-label">Food & activity balance</div>
+        <div class="balance-bar"><div class="balance-fill" id="balance-fill" style="width:${balance ?? 0}%"></div></div>
+        <div class="balance-copy" id="balance-copy">${balanceCopy(balance)}</div>
+      </div>
+      <div class="food-equation">
+        <div class="balance-label">Food equation</div>
+        <div class="balance-copy" id="food-equation-copy">${foodEquationCopy(balance, b.species)}</div>
+      </div>
+    </div>
+
+    <p class="lead" style="text-align:center;">Let's keep setting this up over time - extra assessments can be added later without redoing this setup.</p>
+    <footer class="note">Wellness estimate only. Not a diagnosis or life-expectancy prediction.</footer>
+  `;
+
+  document.getElementById("f-exercise").oninput = e=>{ state.followup.exerciseMinutes = e.target.value; updateBalanceUI(); };
+  document.getElementById("f-meals").oninput = e=>{ state.followup.mealsPerDay = e.target.value; };
+  document.getElementById("f-food-type").onchange = e=>{ state.followup.foodType = e.target.value; };
+  app.querySelectorAll(".opts[data-field]").forEach(row=>{
+    row.querySelectorAll(".opt").forEach(o=>{
+      o.onclick = ()=>{ state.followup[row.dataset.field] = parseFloat(o.dataset.val); render(); };
+    });
+  });
+  document.getElementById("connect-wearable").onclick = ()=>{
+    document.getElementById("wearable-status").textContent =
+      "Wearable syncing isn't live yet - this button is ready for when it is. Everything above keeps working fine without it.";
+  };
 }
 
 render();

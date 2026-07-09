@@ -1,5 +1,5 @@
 /* Runs every named pet profile through the full scoring pipeline (all 4
-   rounds' worth of answers) and prints a one-line summary each — a quick
+   rounds' worth of answers) and prints a one-line summary each - a quick
    spread-check before a stakeholder review, not a pass/fail test suite. */
 const M = require("../frailty-model.js");
 const { PROFILES } = require("./pet-profiles.js");

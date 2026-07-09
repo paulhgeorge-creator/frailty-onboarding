@@ -1,7 +1,7 @@
 """Pluggable photo-age predictor.
 
 Real status: NO trained weights ship with this service, and none exist
-publicly for a droppable model — see README.md for why (no license on the
+publicly for a droppable model - see README.md for why (no license on the
 reference repo, no shipped weights, dog-only coverage, author's own accuracy
 caveat). Until AGE_MODEL_WEIGHTS points at a real trained model, predict()
 honestly returns confidence=0 / status="untrained" rather than a fabricated
@@ -22,7 +22,7 @@ class AgePredictor:
             self._model = self._load_model(weights_path)
 
     def _load_model(self, path):
-        import tensorflow as tf  # ponytail: lazy import — only paid for once real weights exist
+        import tensorflow as tf  # ponytail: lazy import - only paid for once real weights exist
         return tf.keras.models.load_model(path)
 
     @property
@@ -32,11 +32,11 @@ class AgePredictor:
     def predict(self, image, species=None):
         """image: PIL.Image (already validated by the caller). Returns
         {ageYears, confidence, status}. confidence is always 0.0 when no real
-        trained model is loaded — never a made-up number."""
+        trained model is loaded - never a made-up number."""
         if not self.is_trained:
             return {"ageYears": None, "confidence": 0.0, "status": "untrained"}
 
-        # Real inference path — exercised once a real model is configured.
+        # Real inference path - exercised once a real model is configured.
         # Preprocessing (resize/normalize) matches whatever the loaded model
         # expects; kept generic here since no concrete trained model exists
         # yet to pin an exact input contract to.

@@ -79,7 +79,7 @@ test("young unhealthy dog still reads elevated frailty, hits the delta clamp", (
 test("unknown-DOB cat: estimation pipeline runs cleanly off a guessed age", () => {
   // Previously index.html used a flat AGE_GUESS.senior_guess=8 for every
   // species/size, which for cats fell in the "middle" life-stage bucket
-  // instead of "senior" — a pre-existing quirk. seniorGuessAge() (this pass)
+  // instead of "senior" - a pre-existing quirk. seniorGuessAge() (this pass)
   // fixes it by asking per species/size instead of using a flat guess.
   const guessedAge = M.seniorGuessAge("cat", 4);
   assert.equal(guessedAge, 11);
@@ -100,7 +100,7 @@ test("shih tzu: in both brachy and chondro lists, gets max not sum", () => {
   assert.equal(shihTzu, M.FRAILTY_MODEL_CONFIG.BRACHY_BREED_FI_MODIFIER);
 });
 
-/* ---------- 8. Cat delta dampening — no feline FI-age curve exists ---------- */
+/* ---------- 8. Cat delta dampening - no feline FI-age curve exists ---------- */
 test("cat delta is dampened relative to an identical-input dog", () => {
   const args = {chronAge:8, weightKg:5, breed:"Mixed", observedFI:0.3};
   const dog = M.estimatePhysiologicalAge({...args, species:"dog"});
@@ -136,7 +136,7 @@ test("scoreActivityMinutes still works without a breed argument (back-compat)", 
   assert.equal(M.scoreActivityMinutes("dog", 10, 8), 1);
 });
 
-/* ---------- 12. Overweight percentile — real prevalence-anchored ---------- */
+/* ---------- 12. Overweight percentile - real prevalence-anchored ---------- */
 test("overweightPercentile: BCS anchors match cited prevalence stats exactly", () => {
   assert.equal(M.overweightPercentile("dog", 8), 22); // cited "22% obese" dogs
   assert.equal(M.overweightPercentile("dog", 6), 59); // cited "59% overweight-or-obese" dogs
@@ -147,7 +147,7 @@ test("overweightPercentile: ideal/underweight BCS returns null, not a fabricated
   assert.equal(M.overweightPercentile("dog", 5), null);
   assert.equal(M.overweightPercentile("dog", 2), null);
 });
-test("overweightPercentile: monotonic — heavier BCS never ranks a lower percentile", () => {
+test("overweightPercentile: monotonic - heavier BCS never ranks a lower percentile", () => {
   assert.ok(M.overweightPercentile("dog", 9) < M.overweightPercentile("dog", 8));
   assert.ok(M.overweightPercentile("dog", 8) < M.overweightPercentile("dog", 7));
   assert.ok(M.overweightPercentile("dog", 7) < M.overweightPercentile("dog", 6));
@@ -183,6 +183,69 @@ test("BCS_CHART: 9-point scale for both species, ideal band at 4-5", () => {
     const ideal = M.BCS_CHART[species].filter(c=>c.bcs===4||c.bcs===5);
     ideal.forEach(c=> assert.ok(/ideal/i.test(c.label)));
   });
+});
+
+/* ---------- 16. Display-only puppy/kitten stage bucket ---------- */
+test("lifeStageDisplay: under-1yo reads as puppy regardless of species/size, doesn't touch lifeStage()", () => {
+  assert.equal(M.lifeStageDisplay("dog", 0.5, 30), "puppy");
+  assert.equal(M.lifeStageDisplay("cat", 0.5, 4), "puppy");
+  assert.equal(M.lifeStage("dog", 0.5, 30), "young", "the FI-curve bucket is untouched by the display bucket");
+});
+test("lifeStageDisplay: 1yo+ falls through to the existing 3-bucket lifeStage()", () => {
+  assert.equal(M.lifeStageDisplay("dog", 8, 65), M.lifeStage("dog", 8, 65));
+});
+
+/* ---------- 17. WHOOP-style health score reuses fiZone's own breakpoints ---------- */
+test("healthScore: anchored at fiZone's own breakpoints, monotonically decreasing", () => {
+  assert.equal(M.healthScore(0), 100);
+  assert.equal(M.healthScore(0.12), 85);
+  assert.equal(M.healthScore(0.24), 65);
+  assert.equal(M.healthScore(0.4), 40);
+  assert.ok(M.healthScore(0.24) < M.healthScore(0.12));
+  assert.ok(M.healthScore(0.4) < M.healthScore(0.24));
+  assert.ok(M.healthScore(1) >= 0);
+});
+
+/* ---------- 18. Health multiplier - completion-page metric, distinct from age ---------- */
+test("healthMultiplier: 1.0 baseline when observed matches expected exactly", () => {
+  assert.equal(M.healthMultiplier(0.16, 0.16), 1);
+});
+test("healthMultiplier: below 1 when fewer deficits than typical, above 1 when more", () => {
+  assert.ok(M.healthMultiplier(0.08, 0.16) < 1);
+  assert.ok(M.healthMultiplier(0.32, 0.16) > 1);
+});
+test("healthMultiplier: clamped to a display-sane range, never wild", () => {
+  assert.ok(M.healthMultiplier(1, 0.01) <= 2);
+  assert.equal(M.healthMultiplier(0.5, 0), 1, "guards a zero expectedFI denominator");
+});
+
+/* ---------- 19. Food & activity balance - soft 0-100, not a hard limit ---------- */
+test("foodActivityBalance: all-ideal inputs score 100, all-concerning score 0", () => {
+  assert.equal(M.foodActivityBalance({activityDeficit:0, portionScore:0, treatsScore:0}), 100);
+  assert.equal(M.foodActivityBalance({activityDeficit:1, portionScore:1, treatsScore:1}), 0);
+});
+test("foodActivityBalance: averages whatever inputs are actually provided", () => {
+  assert.equal(M.foodActivityBalance({activityDeficit:0.5}), 50);
+  assert.equal(M.foodActivityBalance({}), null, "no inputs at all - no fabricated number");
+});
+
+/* ---------- 20. Food equation multiplier - 0.75x-1.75x, no fabricated tail ---------- */
+test("foodEquationMultiplier: perfect balance is best (0.75x), zero balance is worst (1.75x)", () => {
+  assert.equal(M.foodEquationMultiplier(100), 0.75);
+  assert.equal(M.foodEquationMultiplier(0), 1.75);
+  assert.equal(M.foodEquationMultiplier(null), 1);
+});
+test("foodEquationMultiplier: stays within its own stated limits across the whole 0-100 domain", () => {
+  for (let pct = 0; pct <= 100; pct += 10){
+    const m = M.foodEquationMultiplier(pct);
+    assert.ok(m >= 0.75 && m <= 1.75);
+  }
+});
+
+/* ---------- 21. Food balance percentile - comparable, explicitly illustrative ---------- */
+test("foodBalancePercentile: mirrors the balance score directly, no separate fabricated curve", () => {
+  assert.equal(M.foodBalancePercentile(67), 67);
+  assert.equal(M.foodBalancePercentile(null), null);
 });
 
 console.log(failed ? `\n${failed} test(s) failed` : "\nAll tests passed");
