@@ -135,6 +135,17 @@ test("activity threshold: falls back to size-class default when breed unknown", 
 test("scoreActivityMinutes still works without a breed argument (back-compat)", () => {
   assert.equal(M.scoreActivityMinutes("dog", 10, 8), 1);
 });
+test("scoreActivityMinutes flags a likely-overexertion high end, not just a low end", () => {
+  // medium dog, 45min threshold: 90min (2x) is a caution zone, 150min (3.3x) reads as overexertion
+  assert.equal(M.scoreActivityMinutes("dog", 45, 20), 0);   // right at target - no flag either direction
+  assert.equal(M.scoreActivityMinutes("dog", 90, 20), 0.5); // just past the caution multiplier
+  assert.equal(M.scoreActivityMinutes("dog", 150, 20), 1);  // past the overexertion multiplier
+});
+test("activityGuidance exposes the same numbers scoreActivityMinutes uses internally", () => {
+  const g = M.activityGuidance("dog", 20, "");
+  assert.equal(g.target, M.ACTIVITY_MINUTES_TABLE.dog.medium);
+  assert.equal(g.safeMax, g.target * M.ACTIVITY_UPPER_RATIO_CAUTION);
+});
 
 /* ---------- 12. Overweight percentile - real prevalence-anchored ---------- */
 test("overweightPercentile: BCS anchors match cited prevalence stats exactly", () => {

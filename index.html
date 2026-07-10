@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pawl - Vitality Check</title>
+<!-- The design tokens below (--pv-font-display/--pv-font-body) already name
+     Cormorant + Inter as the Pawl app's own fonts - they just weren't being
+     loaded, so every page silently fell back to system serif/sans-serif.
+     This loads the real families so "same font as the Pawl app" actually
+     renders, instead of swapping in a different, unverified font choice. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   /* Same design language as the pv-root baseline widget, applied to every
      page (BCS, Part 1-4, results, completion) so the whole flow reads as one
@@ -133,7 +141,8 @@ const { lifeStage, lifeStageDisplay, fiZone, healthScore, healthMultiplier, food
         catHumanEquivalent, dogHumanEquivalent, bcsToDeficit,
         estimatePhysiologicalAge, scoreActivityMinutes, classifyDelta,
         bandYears, AGE_GUESS, overweightPercentile, fuseAge, deltaPercentOfAge,
-        BCS_CHART } = window.FrailtyModel;
+        BCS_CHART, getActivityMinutesThreshold, activityGuidance,
+        dogSizeClass, CHONDRODYSTROPHIC_BREEDS, BRACHY_BREEDS } = window.FrailtyModel;
 
 const KG_PER_LB = 0.45359237;
 
@@ -149,39 +158,45 @@ const SCALE3 = [
 ];
 
 const PART1_CORE = [
-  {id:"p1_mobility", system:"Mobility",
-    text:{dog:"Any trouble with stairs, or jumping into the car?", cat:"Any reluctance or trouble jumping to a favorite high perch?"}},
+  {id:"mob_gate", system:"Mobility",
+    text:{dog:"Any trouble with stairs or jumping into the car, or does your pet seem stiff/slow to get up after resting?",
+          cat:"Any reluctance or trouble jumping to a favorite high perch, or does your pet seem stiff/slow to get up after resting?"}},
   {id:"p1_activity", type:"minutes",
     text:{both:"On a typical day, about how many minutes of walking or active play does your pet get?"},
     hint:"Rough estimate is fine - total minutes across the whole day."},
-  {id:"p1_exhaustion", text:{both:"Tires quickly on walks or play, or needs longer to recover?"}},
-  {id:"p1_stiffness", text:{both:"Does your pet need a moment to get up after resting, or seem stiff for the first few steps?"}},
-  {id:"p1_appetite", text:{both:"Any notable increase or decrease in eating?"}},
-  {id:"p1_coat", text:{dog:"Coat duller or matting more than usual?", cat:"Coat duller, matting, or self-grooming less than usual?"}},
-  {id:"p1_vitality", text:{both:"Overall - does your pet just seem a little less spry lately?"}, isGlobal:true},
+  {id:"p1_exhaustion", text:{both:"Tires quickly on walks or play, or needs longer to recover?"}, dependsOn:{id:"mob_gate", min:0.5}},
+  {id:"p3_exercise_tolerance", text:{dog:"Has to stop and rest on normal walks?", cat:"Avoids movement, or hides, more than usual?"}, dependsOn:{id:"mob_gate", min:0.5}},
+  {id:"p3_muscle", text:{both:"Visible loss of muscle over the back or hind legs?"}, dependsOn:{id:"mob_gate", min:0.5}},
 ];
 
 const PART2 = [
   {id:"p2_vision", text:{both:"Bumping into things, or hesitant in dim light?"}},
   {id:"p2_hearing", text:{both:"Not responding to their name or familiar sounds?"}},
-  {id:"p2_cognition", text:{both:"Staring at walls, getting \"stuck,\" or seeming confused?"}},
   {id:"p2_sleep", text:{both:"Restless nights, pacing, or a changed sleep schedule?"}},
   {id:"p2_interaction", text:{both:"More withdrawn, or unusually clingy compared to before?"}},
-  {id:"p2_dental", text:{both:"Bad breath, visible tartar, or trouble chewing / dropping food?"}},
-  {id:"p2_skin", text:{both:"Any new lumps, sores, or masses you can feel?"}, hint:"Just note it - this isn't a diagnosis."},
-  {id:"p2_weight_trend", text:{both:"Noticeable weight loss or gain over recent months?"}},
+  {id:"p1_vitality", text:{both:"Overall - does your pet just seem a little less spry lately?"}, isGlobal:true},
+  {id:"p2_cognition", text:{both:"Staring at walls, getting \"stuck,\" or seeming confused?"}},
+  {id:"p2_cognition_detail", detailOnly:true, refines:"p2_cognition", dependsOn:{id:"p2_cognition", min:0.5},
+    text:{both:"Is that a daily thing, or just occasional?"},
+    opts:[{v:0.5,label:"Occasional"},{v:1,label:"Daily"}]},
 ];
 
 const PART3 = [
-  {id:"p3_water", text:{both:"Drinking noticeably more or less than usual?"}},
-  {id:"p3_urination", text:{both:"Urinating more often, straining, or having accidents?"}},
-  {id:"p3_continence", text:{both:"Any leaking of urine or stool, especially while resting?"}},
+  {id:"appetite_weight_gate", text:{both:"Any notable change in eating, or weight loss/gain over recent months?"}},
+  {id:"appetite_weight_detail", detailOnly:true, dependsOn:{id:"appetite_weight_gate", min:0.5},
+    text:{both:"Gained, or lost?"}, opts:[{v:"gain",label:"Gained"},{v:"loss",label:"Lost"},{v:"both",label:"Both, at different times"}]},
+  {id:"coat_dental_skin_gate", text:{dog:"Noticed anything different about their coat, teeth/breath, or new lumps/skin changes?",
+    cat:"Noticed anything different about their coat/self-grooming, teeth/breath, or new lumps/skin changes?"}},
+  {id:"coat_dental_skin_detail", detailOnly:true, dependsOn:{id:"coat_dental_skin_gate", min:0.5},
+    text:{both:"Which one, mainly?"}, opts:[{v:"coat",label:"Coat/grooming"},{v:"dental",label:"Teeth/breath"},{v:"skin",label:"Lumps/skin"}]},
+  {id:"water_urination_continence_gate", text:{both:"Drinking, urinating, or having accidents more or less than usual?"}},
+  {id:"water_detail", detailOnly:true, dependsOn:{id:"water_urination_continence_gate", min:0.5},
+    text:{both:"Which one, mainly?"}, opts:[{v:"water",label:"Drinking"},{v:"urination",label:"Urination"},{v:"continence",label:"Accidents/leaking"}]},
   {id:"p3_digestion", text:{both:"Recurring vomiting, diarrhea, or constipation?"}},
   {id:"p3_breathing", text:{both:"Coughing, panting at rest, or labored breathing?"}},
-  {id:"p3_exercise_tolerance", text:{dog:"Has to stop and rest on normal walks?", cat:"Avoids movement or hides more than usual?"}},
-  {id:"p3_muscle", text:{both:"Visible loss of muscle over the back or hind legs?"}},
-  {id:"p3_temperature", text:{both:"Seeks out heat, reluctant in the cold, or newly sensitive to temperature?"}},
-  {id:"p3_pain", text:{both:"Flinching when touched, reluctant to be handled, or vocalizing?"}},
+  {id:"temperature_pain_gate", text:{both:"Any signs of discomfort - flinching when touched, reluctant to be handled, vocalizing, or newly sensitive to hot/cold?"}},
+  {id:"discomfort_detail", detailOnly:true, dependsOn:{id:"temperature_pain_gate", min:0.5},
+    text:{both:"Which one, mainly?"}, opts:[{v:"pain",label:"Touch/handling"},{v:"temperature",label:"Temperature sensitivity"},{v:"both",label:"Both"}]},
 ];
 
 const PART4 = [
@@ -203,7 +218,7 @@ const state = {
   step:"baseline", // baseline -> bcs -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4 -> complete
   baseline:{
     species:"dog", name:"", breed:"",
-    weightValue:20, weightUnit:"kg",
+    weightValue:44, weightUnit:"lb", // widget's weight field is lbs-only (no kg toggle in this UI) - 44lb ~= 20kg, same effective default as before
     sexNeuter:"male-neutered",
     dobKnown:true, dobMonth:"", dobDay:"", dobYear:"",
     yearsOnlyAge:"",
@@ -212,6 +227,7 @@ const state = {
     healthGoals:[], sleepHours:null, // captured by the pv-widget baseline; not yet wired into scoring - see README
   },
   answers:{}, // id -> score
+  details:{}, // id -> informational-only detail answer (detailOnly questions) - never enters the FI denominator
   followup:{
     exerciseMinutes:"", // seeded from p1_activity once the complete page first renders
     mealsPerDay:"",
@@ -261,18 +277,55 @@ function answeredScores(ids){
   return ids.map(id=>state.answers[id]).filter(v => v !== undefined);
 }
 
-function computeResult(partNumber){
+/* Single source of truth for "which answer ids belong to round N" - shared by
+   computeResult() (pools every round up to N for the overall FI) and
+   categoryScore() (scopes to just round N for that round's own display score). */
+function idsForPart(partNumber){
+  const scorable = q => !q.detailOnly;
   const idsByPart = {
-    1: PART1_CORE.map(q=>q.id).concat(["p1_bcs"]),
-    2: PART2.map(q=>q.id),
-    3: PART3.map(q=>q.id),
-    4: PART4.map(q=>q.id),
+    1: PART1_CORE.filter(scorable).map(q=>q.id),
+    2: PART2.filter(scorable).map(q=>q.id),
+    3: PART3.filter(scorable).map(q=>q.id).concat(["p1_bcs"]),
+    4: PART4.filter(scorable).map(q=>q.id),
   };
+  return idsByPart[partNumber];
+}
+
+/* Raw 0-1 deficit mean for one category - the same number healthScore()
+   turns into that round's 0-100 display score, and (see computeResult) the
+   building block for the overall observedFI. null if nothing in this
+   category has been answered yet, so an unanswered round doesn't drag the
+   average toward 0 - same "skipped just doesn't count" rule as everywhere
+   else in this model. */
+function categoryFI(partNumber){
+  const scores = answeredScores(idsForPart(partNumber));
+  return scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+}
+
+/* Per-category 0-100 display score for that round's result page - reuses
+   healthScore()'s existing FI curve unchanged, just scoped to one category's
+   ids instead of every answered id. */
+function categoryScore(partNumber){
+  const fi = categoryFI(partNumber);
+  return fi != null ? healthScore(fi) : null;
+}
+
+function computeResult(partNumber){
   let allIds = [];
-  for (let p=1;p<=partNumber;p++) allIds = allIds.concat(idsByPart[p]);
+  const catFIs = [];
+  for (let p=1;p<=partNumber;p++){
+    allIds = allIds.concat(idsForPart(p));
+    const fi = categoryFI(p);
+    if (fi != null) catFIs.push(fi);
+  }
   const scores = answeredScores(allIds);
   const n = scores.length;
-  const observedFI = n ? scores.reduce((a,b)=>a+b,0)/n : 0;
+  // observedFI is the average of each answered category's own FI (not a flat
+  // mean across every item) - this is how "each category score is added into
+  // the health multiplier" is realized: a category with 12 items and one
+  // with 5 each get one equal vote, rather than the bigger category
+  // dominating the pooled average.
+  const observedFI = catFIs.length ? catFIs.reduce((a,b)=>a+b,0)/catFIs.length : 0;
 
   const species = state.baseline.species;
   const weight = weightKg();
@@ -307,23 +360,45 @@ function speciesText(q){
   return q.text[state.baseline.species];
 }
 
-function optRow(id, opts, hint){
-  const cur = state.answers[id];
+function optRow(id, opts, cur){
+  // data-idx (not the raw value) so detail-question options can carry string
+  // values (e.g. "gain"/"coat") without any parseFloat/string guessing on click.
   return `<div class="pv-segmented" data-qid="${id}">` +
-    opts.map(o => `<button type="button" class="pv-segment ${cur===o.v?'pv-selected':''}" data-val="${o.v}">${o.label}</button>`).join("") +
-    `</div>` + (hint?`<p class="pv-hint">${hint}</p>`:"");
+    opts.map((o,i) => `<button type="button" class="pv-segment ${cur===o.v?'pv-selected':''}" data-idx="${i}">${o.label}</button>`).join("") +
+    `</div>`;
+}
+
+/* Shared by the Round 1 minutes question and the completion page's exercise
+   field - a real target/safe-max figure (from activityGuidance() in
+   frailty-model.js, species/size/breed-aware) instead of a vague "answer
+   accurately" hint, plus a caution flag once minutes clear the same
+   ACTIVITY_UPPER_RATIO_CAUTION multiplier scoreActivityMinutes() itself uses
+   for the high-end deficit - so the copy and the scoring agree on what
+   counts as "too much." */
+function activityGuidanceText(minutesVal){
+  const b = state.baseline;
+  const g = activityGuidance(b.species, weightKg(), b.breed);
+  const base = `Typical target for a pet their size: ~${g.target} min/day (up to ~${g.safeMax} min before it starts reading as more than usual).`;
+  if (!Number.isFinite(minutesVal)) return {text: base, caution:false};
+  if (minutesVal >= g.safeMax){
+    return {text: `${base} At ~${minutesVal} min, that's above the usual safe range for their size - worth easing back unless your vet has said otherwise.`, caution:true};
+  }
+  return {text: base, caution:false};
 }
 
 function minutesInput(q){
   const raw = (state.raw && state.raw[q.id]) ?? "";
-  return `<input type="number" class="minutes-input" data-qid="${q.id}" min="0" step="5" value="${raw}" placeholder="e.g. 30">`;
+  const g = activityGuidanceText(parseFloat(raw));
+  return `<input type="number" class="minutes-input" data-qid="${q.id}" min="0" step="5" value="${raw}" placeholder="e.g. 30">
+    <p class="pv-hint activity-guidance" id="activity-guidance-${q.id}" style="${g.caution?'color:var(--pv-warn);':''}">${g.text}</p>`;
 }
 
 function questionBlock(q, opts){
+  const store = q.detailOnly ? state.details : state.answers;
   return `<div class="pv-field" style="grid-column:1/-1;">
     <label>${speciesText(q)}</label>
     ${q.hint?`<p class="pv-hint">${q.hint}</p>`:""}
-    ${q.type==="minutes" ? minutesInput(q) : optRow(q.id, opts || SCALE3)}
+    ${q.type==="minutes" ? minutesInput(q) : optRow(q.id, opts || SCALE3, store[q.id])}
   </div>`;
 }
 
@@ -562,17 +637,27 @@ const PV_WIDGET_HTML = `
       <div class="pv-field">
         <label>Age &amp; weight</label>
         <div class="pv-subrow">
-          <input type="number" data-pv="age" placeholder="Age (yrs)" min="0" />
-          <input type="number" data-pv="weight" placeholder="Weight (kg)" min="0" />
+          <input type="number" data-pv="age" placeholder="Age (yrs)" min="0" max="20" />
+          <input type="number" data-pv="weight" placeholder="Weight (lbs)" min="0" />
+        </div>
+        <div class="pv-segmented" data-pv="weight-unit-group" style="margin-top:6px;">
+          <button type="button" class="pv-segment pv-selected" data-pv="weight-unit" data-val="lb">lbs</button>
+          <button type="button" class="pv-segment" data-pv="weight-unit" data-val="kg">kg</button>
         </div>
       </div>
 
-      <div class="pv-field">
+      <div class="pv-field" style="grid-column:1/-1;">
         <label>Daily activity level</label>
-        <div class="pv-segmented" data-pv="activity-group">
-          <button type="button" class="pv-segment" data-pv="activity" data-val="low">Low</button>
-          <button type="button" class="pv-segment" data-pv="activity" data-val="moderate">Moderate</button>
-          <button type="button" class="pv-segment" data-pv="activity" data-val="high">High</button>
+        <div class="pv-segmented" data-pv="activity-group" style="flex-wrap:nowrap;gap:6px;">
+          <button type="button" class="pv-segment" data-pv="activity" data-val="low" style="padding:9px 10px;flex:1;justify-content:center;white-space:nowrap;"
+            data-title-dog="Minimal structured exercise: one or two short leash walks, mostly resting indoors."
+            data-title-cat="Minimal structured exercise: brief interactive play, mostly lounging/sleeping.">🐾 Low</button>
+          <button type="button" class="pv-segment" data-pv="activity" data-val="moderate" style="padding:9px 10px;flex:1;justify-content:center;white-space:nowrap;"
+            data-title-dog="Regular daily activity: 30-45 min of walks or fetch spread across the day."
+            data-title-cat="Regular daily activity: a few 5-10 min play bursts plus normal roaming.">🐾🐾 Moderate</button>
+          <button type="button" class="pv-segment" data-pv="activity" data-val="high" style="padding:9px 10px;flex:1;justify-content:center;white-space:nowrap;"
+            data-title-dog="Vigorous, sustained activity most days: 60+ min of running, hiking, or high-energy training."
+            data-title-cat="Vigorous, sustained activity most days: frequent active play, climbing, or lots of movement.">🐾🐾🐾 High</button>
         </div>
       </div>
 
@@ -651,7 +736,7 @@ function initPetVitalsWidget(root){
     '<rect x="20" y="68" width="205" height="4" fill="#000000"/></svg>';
 
   var headerIllos = q('[data-pv="header-illos"]');
-  if(headerIllos){ headerIllos.innerHTML = DOG_SVG + CAR_SVG + CAT_SVG; }
+  if(headerIllos){ headerIllos.innerHTML = DOG_SVG + CAT_SVG; }
   var dogSlot = q('[data-pv="icon-dog-slot"]');
   var catSlot = q('[data-pv="icon-cat-slot"]');
   if(dogSlot) dogSlot.innerHTML = DOG_SVG;
@@ -792,8 +877,18 @@ function wirePetVitalsToState(root){
 
   const typeDog = root.querySelector('[data-pv="type-dog"]');
   const typeCat = root.querySelector('[data-pv="type-cat"]');
-  if (typeDog) typeDog.addEventListener("click", ()=>{ b.species = "dog"; });
-  if (typeCat) typeCat.addEventListener("click", ()=>{ b.species = "cat"; });
+  // Each activity-level button carries a dog-specific AND cat-specific hover
+  // title (data-title-dog/data-title-cat) - this keeps the tooltip shown to
+  // one species at a time instead of listing both in the same hover, so
+  // owners never see the other species' examples mixed into their own.
+  function syncActivityTitles(){
+    root.querySelectorAll('[data-pv="activity"]').forEach(btn=>{
+      btn.title = b.species === "cat" ? btn.dataset.titleCat : btn.dataset.titleDog;
+    });
+  }
+  if (typeDog) typeDog.addEventListener("click", ()=>{ b.species = "dog"; syncActivityTitles(); });
+  if (typeCat) typeCat.addEventListener("click", ()=>{ b.species = "cat"; syncActivityTitles(); });
+  syncActivityTitles(); // default species is "dog" until the owner picks otherwise
 
   const nameEl = root.querySelector('[data-pv="name"]');
   if (nameEl) nameEl.addEventListener("input", e=>{ b.name = e.target.value.trim(); });
@@ -805,15 +900,37 @@ function wirePetVitalsToState(root){
   // path used, fed through the same fuseAge() pipeline unchanged.
   const ageEl = root.querySelector('[data-pv="age"]');
   if (ageEl) ageEl.addEventListener("input", e=>{
+    // max="20" alone only affects the spinner arrows/form validation, not
+    // free typing - clamp here so typing "200" can't slip through either.
+    if (parseFloat(e.target.value) > 20){ e.target.value = "20"; }
     b.dobKnown = false;
     b.yearsOnlyAge = e.target.value;
   });
 
-  // No unit toggle in this widget - weight is kg-only here.
+  // Defaults to lbs; the lbs/kg toggle below lets the owner switch either
+  // way. weightKg() converts via KG_PER_LB for every downstream size/BCS/
+  // activity calc regardless of which unit is currently displayed.
   const weightEl = root.querySelector('[data-pv="weight"]');
   if (weightEl) weightEl.addEventListener("input", e=>{
     b.weightValue = parseFloat(e.target.value) || 0;
-    b.weightUnit = "kg";
+  });
+  const weightUnitBtns = root.querySelectorAll('[data-pv="weight-unit"]');
+  function setWeightUnit(unit){
+    if (b.weightUnit === unit) return;
+    // Convert the currently-typed number too - switching the toggle should
+    // update the displayed figure, not just relabel a now-wrong number.
+    const cur = parseFloat(weightEl.value);
+    if (Number.isFinite(cur)){
+      const converted = unit === "kg" ? cur * KG_PER_LB : cur / KG_PER_LB;
+      weightEl.value = Math.round(converted * 10) / 10;
+      b.weightValue = parseFloat(weightEl.value) || 0;
+    }
+    b.weightUnit = unit;
+    weightEl.placeholder = unit === "kg" ? "Weight (kg)" : "Weight (lbs)";
+    weightUnitBtns.forEach(btn=>btn.classList.toggle("pv-selected", btn.getAttribute("data-val")===unit));
+  }
+  weightUnitBtns.forEach(btn=>{
+    btn.addEventListener("click", ()=> setWeightUnit(btn.getAttribute("data-val")));
   });
 
   // Prefills Part 1's activity-minutes question from the chosen level so it
@@ -890,29 +1007,58 @@ function renderBCS(){
 }
 
 const PART_META = {
-  part1: {items:PART1_CORE, title:"Round 1 - the basics", idx:0, num:1},
-  part2: {items:PART2, title:"Round 2 - senses & mind", idx:1, num:2},
-  part3: {items:PART3, title:"Round 3 - internal signals", idx:2, num:3},
-  part4: {items:PART4, title:"Round 4 - history & context", idx:3, num:4},
+  part1: {items:PART1_CORE, title:"Mobility & Energy", idx:0, num:1, key:"mobility"},
+  part2: {items:PART2, title:"Senses, Mind & Behavior", idx:1, num:2, key:"senses"},
+  part3: {items:PART3, title:"Body & Internal Health", idx:2, num:3, key:"body"},
+  part4: {items:PART4, title:"Medical & Vet History", idx:3, num:4, key:"history"},
 };
+
+/* Why each category is worth answering, not just what it asks - shown once
+   per round so the value is felt up front instead of only implied by the
+   questions themselves. Same two-sentence shape across all four: what this
+   round catches, then why answering it is worth the owner's time. */
+const WHY_ROUND_MATTERS = {
+  mobility: "Mobility changes are usually the first thing owners notice, and the easiest to act on. This round builds a same-day baseline before anything else.",
+  senses: "Senses and behavior shift quietly, often before it's connected to aging. This round catches what's easy to miss day-to-day.",
+  body: "Appetite, thirst, and digestion are where organ-system changes tend to show up first. This is the highest-value round to answer, even partially.",
+  history: "Vet-documented history is the most accurate input in the whole estimate. This last round turns a good guess into a sharp one.",
+};
+
+// A question with dependsOn only renders once its gate answer is >= the
+// threshold - this is the whole "deeper question only if flagged" mechanism.
+function visibleItems(items){
+  return items.filter(q => !q.dependsOn || (state.answers[q.dependsOn.id] ?? 0) >= q.dependsOn.min);
+}
 
 function renderPart(key){
   const meta = PART_META[key];
+  const items = visibleItems(meta.items);
   const body = `
     <p class="pv-eyebrow">A Whoop for the whole household</p>
     <h2 class="pv-headline">${meta.title}</h2>
+    <p class="pv-hint">${WHY_ROUND_MATTERS[meta.key]}</p>
     <p class="pv-hint">${meta.num===1 ? "Answer what you can - skip anything you're unsure of." : "Every extra answer sharpens the estimate."}</p>
     <div class="pv-grid">
-      ${meta.items.map(q => questionBlock(q, q.opts)).join("")}
+      ${items.map(q => questionBlock(q, q.opts)).join("")}
     </div>
   `;
   const footer = `<button type="button" class="pv-pill-btn" id="next-part">See ${meta.num===1?"my estimate":"the sharpened estimate"}</button>`;
   app.innerHTML = pvShell(meta.title, key, body, footer);
 
+  const byId = {};
+  meta.items.forEach(q=>{ byId[q.id] = q; });
   app.querySelectorAll(".pv-segmented").forEach(row=>{
-    row.querySelectorAll(".pv-segment").forEach(o=>{
+    const q = byId[row.dataset.qid];
+    const opts = q.opts || SCALE3;
+    row.querySelectorAll(".pv-segment").forEach((o,i)=>{
       o.onclick = ()=>{
-        state.answers[row.dataset.qid] = parseFloat(o.dataset.val);
+        const val = opts[i].v;
+        if (q.detailOnly){
+          state.details[q.id] = val;
+          if (q.refines && val === 1) state.answers[q.refines] = 1; // "daily" bumps cognition to severe; "occasional" leaves the 0.5 gate answer as-is
+        } else {
+          state.answers[q.id] = val;
+        }
         render();
       };
     });
@@ -925,7 +1071,11 @@ function renderPart(key){
       state.answers[inp.dataset.qid] = scoreActivityMinutes(state.baseline.species, raw, weightKg(), state.baseline.breed);
       // deliberately no render() here - re-rendering innerHTML on every
       // keystroke would blow away focus/cursor mid-typing (same reason
-      // f-name/f-breed/f-weight above don't re-render either).
+      // f-name/f-breed/f-weight above don't re-render either) - the guidance
+      // line is patched directly instead.
+      const g = activityGuidanceText(raw);
+      const hint = document.getElementById("activity-guidance-"+inp.dataset.qid);
+      if (hint){ hint.textContent = g.text; hint.style.color = g.caution ? "var(--pv-warn)" : ""; }
     };
   });
   document.getElementById("next-part").onclick = ()=>{ state.step = "result"+meta.num; render(); };
@@ -1016,6 +1166,174 @@ function personalizedInsights(r){
   return {watch, help};
 }
 
+/* Per-category content for the round 1-3 result pages - recommendations,
+   watch-outs, and a "did you know" fact, all grounded in citations already
+   used elsewhere in this app/README (Banzato et al. 2019, size-based senior
+   onset) rather than invented numbers. Round 4 keeps the existing life-stage
+   STAGE_CONTENT card instead (see renderResult) since it's the synthesized
+   overall takeaway, not a single-category one. */
+const CATEGORY_CONTENT = {
+  mobility: {
+    watchFor: ["Reduced willingness to jump, use stairs, or rise after resting", "Tiring faster or needing longer recovery after walks or play", "Visible muscle loss over the back or hind legs"],
+    recommendations: ["Keep daily activity consistent with what's typical for their size and breed", "Ask your vet about joint-friendly exercise or supplements if stiffness shows up early", "Track how long it takes them to get moving after resting - small changes add up"],
+    didYouKnow: {
+      dog: "Large and giant-breed dogs reach senior years several years earlier than small breeds, and lose roughly a month of lifespan per 2kg of extra body mass - size drives this app's aging curve as much as age itself.",
+      cat: "Cats don't have dogs' size-based senior-onset differences - this app treats all cats the same way on that front. Instead, mobility loss in cats often hides behind reduced jumping or grooming rather than an obvious limp, which is why it's easy to miss.",
+    },
+  },
+  senses: {
+    watchFor: ["Bumping into things or hesitating in dim light", "Not responding to their name or familiar sounds", "Getting \"stuck\" or seeming confused, especially if it's a daily thing"],
+    recommendations: ["Keep a predictable routine - it eases stress from sensory or cognitive changes", "Mention any daily confusion or disorientation to your vet - it's the most actionable of these signs", "Small environmental tweaks (night-lights, a consistent furniture layout) help more than they sound like they would"],
+    didYouKnow: "Cognitive and sensory changes are often the earliest visible signs of aging that a single vet visit won't catch - that's why frailty-index scoring (Banzato et al. 2019) leans on owner-observed behavior day-to-day, not just a clinical exam.",
+  },
+  body: {
+    watchFor: ["Appetite or weight moving in either direction over a few months", "New lumps, coat changes, or dental/breath changes", "Drinking, urination, or accident patterns changing"],
+    recommendations: ["Body condition is the single highest-impact lever for most pets - small portion or activity changes add up", "A change in thirst or urination is worth mentioning to your vet even if it seems minor", "Track the direction (gain vs. loss, more vs. less) - it matters more than the symptom alone"],
+    didYouKnow: "Internal-signal changes - thirst, digestion, breathing - tend to be the most clinically predictive category: Banzato's 33-item frailty index leans heavily on organ-system findings because they often show up after other systems already have.",
+  },
+  history: {
+    watchFor: ["Multiple ongoing diagnoses or medications stacking up", "More frequent or urgent vet visits than in past years", "Any vet-flagged bloodwork or organ findings"],
+    recommendations: ["Keep vet visit frequency and any diagnoses current here - it's the most accurate input in the whole estimate", "Fill in the optional bloodwork/organ fields if you have them - they sharpen the estimate more than any owner-observed answer", "Use the free-text concern field - it's the one place to flag something none of the structured questions cover"],
+    didYouKnow: "Vet-documented findings carry more weight than owner-observed symptoms in a frailty index - this round alone can move the estimate more than the other three combined, which is why it's gated behind three rounds of buy-in.",
+  },
+};
+
+/* One entry per scorable symptom id, shared by two things:
+   - the round result pages' "Watch out for" list, which now shows whichever
+     of THESE the owner actually flagged this round (dynamic per round)
+     instead of a fixed generic list
+   - the completion page's deep "Watch out for" section (see renderComplete),
+     which shows every flagged item across all 4 rounds with its full
+     meaning/consequence detail, not just the short label
+   General veterinary-informed guidance, same wellness-not-diagnostic
+   framing as STAGE_CONTENT elsewhere in this file - no invented statistics. */
+const SYMPTOM_INFO = {
+  mob_gate: {label:"Trouble with stairs/jumping or stiffness rising", meaning:"Usually points to early joint or muscle discomfort.", consequence:"Left unaddressed, mobility loss tends to compound - less activity accelerates the same muscle and joint decline that caused it."},
+  p1_exhaustion: {label:"Tiring quickly or slow to recover", meaning:"Can signal reduced cardiovascular or muscular stamina.", consequence:"Over time this often narrows the activity a pet will tolerate, which can snowball into further deconditioning."},
+  p3_exercise_tolerance: {label:"Stopping to rest on normal walks / avoiding movement", meaning:"Often reflects joint pain, reduced heart/lung capacity, or both.", consequence:"Ignored, reduced exercise tolerance typically keeps progressing until even short activity becomes difficult."},
+  p3_muscle: {label:"Visible muscle loss over the back or hind legs", meaning:"A common aging sign (sarcopenia), especially in seniors.", consequence:"Left unmanaged it increases fall risk and slows recovery from any illness or surgery."},
+  p2_vision: {label:"Bumping into things or hesitant in dim light", meaning:"Can point to early vision changes, including cataracts.", consequence:"Untreated vision loss raises injury risk and can add anxiety in unfamiliar environments."},
+  p2_hearing: {label:"Not responding to name or familiar sounds", meaning:"Often reflects gradual hearing loss, common with age.", consequence:"Unaddressed hearing loss can increase startling/anxiety and make safety cues easy to miss."},
+  p2_sleep: {label:"Restless nights or a changed sleep schedule", meaning:"Can reflect discomfort, cognitive changes, or a shifted routine.", consequence:"Persistent sleep disruption is often one of the earliest visible signs of cognitive decline if left unexamined."},
+  p2_interaction: {label:"More withdrawn or unusually clingy", meaning:"Can reflect discomfort, anxiety, or early cognitive changes.", consequence:"If the underlying cause goes unaddressed, behavior changes often keep shifting and can affect quality of life."},
+  p1_vitality: {label:"General sense of being \"less spry\"", meaning:"Subjective, but often an accurate early signal owners pick up before anything else shows.", consequence:"Because it's non-specific, ignoring it just means the underlying cause gets caught later instead of earlier."},
+  p2_cognition: {label:"Staring at walls, getting \"stuck,\" or confusion", meaning:"A classic sign of cognitive decline (canine/feline cognitive dysfunction).", consequence:"Cognitive decline tends to be progressive - earlier vet involvement gives the most options for slowing it."},
+  appetite_weight_gate: {label:"Appetite or weight change", meaning:"Can point to dental pain, GI issues, or metabolic/organ changes, among other causes.", consequence:"Unexplained weight change in either direction is one of the more reliable early flags for an underlying issue."},
+  coat_dental_skin_gate: {label:"Coat, dental, or skin change", meaning:"Coat changes, dental issues, and new lumps each have distinct causes, from pain to skin conditions to growths.", consequence:"Dental disease tends to worsen quietly and can eventually affect eating; new lumps should always be checked rather than watched indefinitely."},
+  water_urination_continence_gate: {label:"Drinking, urination, or continence change", meaning:"Often points to kidney, urinary tract, or hormonal changes.", consequence:"These systems tend to decline gradually - by the time it's obvious, the underlying change has often been building for a while."},
+  p3_digestion: {label:"Recurring vomiting, diarrhea, or constipation", meaning:"Can reflect diet issues, GI disease, or systemic illness.", consequence:"Chronic, unaddressed GI symptoms can affect nutrient absorption and body condition over time."},
+  p3_breathing: {label:"Coughing, panting at rest, or labored breathing", meaning:"Can point to heart, lung, or airway issues.", consequence:"This is one of the more time-sensitive signs here - underlying heart/lung issues can progress faster than other aging signs."},
+  temperature_pain_gate: {label:"Discomfort with touch or temperature sensitivity", meaning:"Often reflects pain, joint issues, or circulation changes.", consequence:"Unaddressed pain tends to reduce activity and mood, which can accelerate the same mobility and muscle decline flagged elsewhere."},
+  p1_bcs: {label:"Body condition notably off the ideal range", meaning:"Affects joint load, organ strain, and metabolic health in either direction.", consequence:"Body condition tends to drift further from ideal over time without a deliberate food or activity adjustment."},
+  p4_diagnoses: {label:"Multiple ongoing diagnoses", meaning:"Diagnoses often interact with each other and with age-related changes.", consequence:"The more that stack up, the more valuable coordinated vet care becomes, versus treating each one separately."},
+  p4_medications: {label:"Multiple daily medications", meaning:"Several medications can also interact with each other.", consequence:"A periodic med review with your vet helps catch interactions or doses that need adjusting as weight or organ function changes."},
+  p4_vet_visits: {label:"Frequent or urgent vet visits", meaning:"Usually reflects something already being actively managed.", consequence:"Rising visit frequency is often the clearest signal that formal follow-up, not just self-monitoring, is the right next step."},
+  p4_dental_history: {label:"Extractions or periodontal disease", meaning:"Means the mouth needs ongoing monitoring, not just a one-time fix.", consequence:"Left unmonitored, dental disease can recur and in advanced cases add strain on the heart and kidneys."},
+  p4_surgical_history: {label:"Major or unresolved surgery/injury", meaning:"Can affect mobility, gait, and pain baseline long-term.", consequence:"Unresolved injuries especially are worth a periodic vet re-check even after the initial recovery period."},
+  p4_bloodwork: {label:"Vet-flagged abnormal bloodwork", meaning:"Typically the earliest, most objective signal available - ahead of any owner-observed symptom.", consequence:"Abnormal values usually call for a recheck on a set schedule, not a one-time look."},
+  p4_organ_findings: {label:"Vet-noted organ findings", meaning:"Already a clinical starting point (e.g. a heart murmur or kidney values), not just a suspicion.", consequence:"These usually come with a vet-recommended monitoring interval - worth confirming what that is if it wasn't specified."},
+  p4_owner_concern: {label:"Owner-flagged concern", meaning:"Didn't fit any structured question, which usually means it's specific enough to be worth raising directly.", consequence:"This kind of concern is exactly what's easy to forget to mention at the next vet visit if it isn't written down somewhere."},
+};
+
+/* Dynamic per-round "Watch out for": whichever of THIS round's answers are
+   actually flagged (score >= 0.5), using SYMPTOM_INFO's short label - so the
+   list changes based on what was actually answered instead of always
+   showing the same 3 lines. Falls back to the round's generic list only
+   when nothing's been flagged yet (so an empty round doesn't look broken). */
+function flaggedWatchFor(partNumber, fallback){
+  const flagged = idsForPart(partNumber).filter(id => (state.answers[id] ?? 0) >= 0.5 && SYMPTOM_INFO[id]);
+  return (flagged.length ? flagged.map(id=>SYMPTOM_INFO[id].label) : fallback).slice(0,3);
+}
+
+/* One "best match for this pet" line per category, built from baseline/
+   answer data the owner already gave (species, breed, weight, activity
+   minutes, BCS, life stage, stated health goals, clinical history) - framed
+   as the fit for THIS pet, not a pass/fail judgment. This is what makes
+   round-to-round suggestions change based on what was actually answered,
+   not just which round it is. */
+function mobilityBestMatch(r){
+  const b = state.baseline;
+  const name = b.name || "Your pet";
+  const raw = parseFloat(state.raw && state.raw.p1_activity);
+  const threshold = getActivityMinutesThreshold(b.species, weightKg(), b.breed);
+  if (!Number.isFinite(raw)) return `For a ${b.weightValue ? b.weightValue+"-lb " : ""}pet their size, ~${threshold} minutes of daily activity is the typical target to aim for.`;
+  if (raw >= threshold * 0.8) return `${name}'s ~${raw} active minutes/day is already a good match for what's typical at their size (~${threshold} min) - just hold steady here.`;
+  return `Working up toward ~${threshold} active minutes/day (currently ~${raw}) would be a better match for their size - no need to jump there all at once.`;
+}
+function sensesBestMatch(r){
+  const b = state.baseline;
+  const stageText = stageLabelText(r.stageDisplay, b.species).toLowerCase();
+  if (b.healthGoals && b.healthGoals.includes("anxiety")) return `Since anxiety/stress is one of the goals you flagged, a predictable routine and consistent environment is usually the best match here - more so than for a pet without that goal.`;
+  if (r.stageDisplay === "senior") return `At the senior stage, a predictable daily routine is usually the better match for easing sensory or cognitive stress - more so than it would be for a younger pet.`;
+  if (r.stageDisplay === "puppy") return `This early stage is the best window for positive socialization and varied exposure - it matters more now than it will later.`;
+  return `At the ${stageText} stage, keeping a consistent routine now is a good match, ahead of any sensory changes that might show up later.`;
+}
+function bodyBestMatch(r){
+  const b = state.baseline;
+  const name = b.name || "Your pet";
+  if (b.bcs <= 3) return `${name}'s body condition (${b.bcs}) reads a bit lean for their frame - a modest portion increase is usually the better match, not a fixed rule.`;
+  if (b.bcs >= 6) return `${name}'s body condition (${b.bcs}) reads a bit fuller for their frame - a modest portion or activity adjustment is usually the better match, not a fixed rule.`;
+  return `${name}'s body condition (${b.bcs}) is already a good match for their frame - the aim here is just to hold steady.`;
+}
+function historyBestMatch(r){
+  const diag = state.answers.p4_diagnoses, visits = state.answers.p4_vet_visits;
+  if (diag >= 0.5 || visits >= 0.5) return `With ${diag >= 0.5 ? "an ongoing diagnosis" : "recent extra vet visits"} on record, twice-yearly checkups are usually a better match than the standard annual cadence.`;
+  return `With a clean history so far, the standard annual vet-visit cadence is a good match - no need to over-schedule.`;
+}
+const CATEGORY_BEST_MATCH = {mobility: mobilityBestMatch, senses: sensesBestMatch, body: bodyBestMatch, history: historyBestMatch};
+
+/* Mirrors personalizedInsights()'s bump technique (a real answer-driven line
+   gets prepended instead of staying purely generic), scoped to one category
+   instead of one life-stage - now built from flaggedWatchFor()/the
+   best-match functions above instead of a fixed list, so it's dynamic per
+   round: two pets (or the same pet re-answering) get different copy based
+   on what was actually flagged. */
+function personalizedCategoryInsights(r, meta, partNumber){
+  const cc = CATEGORY_CONTENT[meta.key];
+  let watchFor = flaggedWatchFor(partNumber, cc.watchFor);
+  let recommendations = [CATEGORY_BEST_MATCH[meta.key](r), ...cc.recommendations].slice(0,3);
+  if (r.zone.vet) watchFor = ["A few of today's answers are worth flagging to your vet soon", ...watchFor].slice(0,3);
+  if (meta.key === "body" && r.overweightPct != null) recommendations = ["Body condition is the highest-impact lever right now - small portion and activity changes add up fast", ...recommendations].slice(0,3);
+  // A couple of categories' facts genuinely differ by species (e.g. mobility's
+  // size-based senior onset only applies to dogs) - didYouKnow is a plain
+  // string when one fact is true for both, or a {dog,cat} object when it isn't.
+  const didYouKnow = typeof cc.didYouKnow === "object" ? cc.didYouKnow[r.species] : cc.didYouKnow;
+  return {watchFor, recommendations, didYouKnow};
+}
+
+/* Completion-page deep "Watch out for": every flagged item across every
+   category answered so far, with full meaning + consequence detail instead
+   of the round pages' short label - "more items, deeper detail," placed at
+   the very end of the flow once all rounds have had a chance to contribute. */
+function deepWatchList(){
+  return Object.keys(SYMPTOM_INFO)
+    .filter(id => (state.answers[id] ?? 0) >= 0.5)
+    .map(id => SYMPTOM_INFO[id]);
+}
+
+function watchOutSectionHtml(){
+  const items = deepWatchList();
+  if (!items.length){
+    return `<div class="pv-card">
+      <div class="pv-insight-title">Watch out for</div>
+      <p class="pv-hint" style="margin:0;">Nothing came back as noticeably concerning across today's answers - nice work. This section fills in with specifics as soon as anything is flagged.</p>
+    </div>`;
+  }
+  // One block per item instead of a single run-on sentence: the symptom name,
+  // then a clearly-labeled "Means" line and "If ignored" line, so each part
+  // is scannable on its own instead of blending into one dense clause.
+  return `<div class="pv-card">
+    <div class="pv-insight-title">Watch out for</div>
+    <p class="pv-hint" style="margin:0 0 12px;">Early awareness is the biggest lever you actually have - most of what's below is manageable if caught now, harder to manage if it isn't.</p>
+    ${items.map((i,idx)=>`
+      <div${idx>0?' class="pv-divider"':''}>
+        <div style="font-weight:500;margin-bottom:4px;">${i.label}</div>
+        <p class="pv-hint" style="margin:0 0 4px;"><strong>Means:</strong> ${i.meaning}</p>
+        <p class="pv-hint" style="margin:0;color:var(--pv-muted);"><strong>If ignored:</strong> ${i.consequence}</p>
+      </div>`).join("")}
+  </div>`;
+}
+
 function scoreRingColor(score){
   if (score >= 70) return "#4caf7d";
   if (score >= 40) return "#e8a33d";
@@ -1027,6 +1345,8 @@ function renderResult(partNumber){
   const name = state.baseline.name || "Your pet";
   const nextPart = partNumber+1;
   const isLast = partNumber===4;
+  const meta = PART_META["part"+partNumber];
+  const nextMeta = PART_META["part"+nextPart];
   // Single fused figure, no range shown - a deliberate product-direction
   // change (this pass) from the earlier range-plus-headline display.
   // Under 1yr, "0 yrs" reads as broken for a puppy/kitten - show months instead.
@@ -1034,7 +1354,11 @@ function renderResult(partNumber){
     ? {value: Math.max(1, Math.round(r.center*12)), unit: " mo"}
     : {value: Math.round(r.center), unit: " yrs"};
   const stageText = stageLabelText(r.stageDisplay, r.species);
-  const { watch, help } = personalizedInsights(r);
+  // Rounds 1-3 show that round's own category card; round 4 keeps the
+  // life-stage card since it's the synthesized overall takeaway.
+  const { watch, help } = isLast ? personalizedInsights(r) : {watch:null, help:null};
+  const catScore = isLast ? null : categoryScore(partNumber);
+  const catInsights = isLast ? null : personalizedCategoryInsights(r, meta, partNumber);
   const ringColor = scoreRingColor(r.score);
   const scoreOffset = 150.8 * (1 - r.score/100);
   // Uncertainty is reflected in tone, not a raw confidence percentage.
@@ -1077,6 +1401,7 @@ function renderResult(partNumber){
     </div>
     ${r.species==="cat" ? `<p class="pv-italic-note">Feline estimate - the science here is still maturing, so this reads a touch less precise.</p>` : ""}
 
+    ${isLast ? `
     <div class="pv-card">
       <div class="pv-insight-title">Watch out for</div>
       <ul>${watch.map(w=>`<li>${w}</li>`).join("")}</ul>
@@ -1084,14 +1409,32 @@ function renderResult(partNumber){
     <div class="pv-card">
       <div class="pv-insight-title">What helps</div>
       <ul>${help.map(h=>`<li>${h}</li>`).join("")}</ul>
+    </div>` : `
+    <div class="pv-card">
+      <div class="pv-insight-title">${meta.title} score</div>
+      <div class="pv-bar"><div class="pv-bar-fill" style="width:${catScore ?? 0}%;background:${scoreRingColor(catScore ?? 0)};"></div></div>
+      <div class="pv-bar-copy">${catScore != null ? `${catScore}/100 - feeds into the overall Health Score above.` : "Answer a question above to see this round's score."}</div>
+      <p class="pv-hint" style="margin:8px 0 0;">Scoring ${meta.title.toLowerCase()} on its own, instead of folding it straight into one big number, shows exactly where to focus next - not just how ${name} is doing overall.</p>
     </div>
+    <div class="pv-card">
+      <div class="pv-insight-title">Watch out for</div>
+      <ul>${catInsights.watchFor.map(w=>`<li>${w}</li>`).join("")}</ul>
+    </div>
+    <div class="pv-card">
+      <div class="pv-insight-title">Recommendations</div>
+      <ul>${catInsights.recommendations.map(h=>`<li>${h}</li>`).join("")}</ul>
+    </div>
+    <div class="pv-card">
+      <div class="pv-insight-title">Did you know?</div>
+      <p class="pv-hint" style="margin:0;">${catInsights.didYouKnow}</p>
+    </div>`}
 
     <p class="pv-hint">This combines their age, body condition, and today's answers - it gets sharper with each round (${r.n} observations so far).</p>
   `;
   const footer = isLast
     ? `<button type="button" class="pv-pill-btn" id="finish-setup">Finish setting up ${name}'s profile</button>`
     : `
-      <button type="button" class="pv-pill-btn" id="next-round">Sharpen this estimate - round ${nextPart}</button>
+      <button type="button" class="pv-pill-btn" id="next-round">Let's look into your pet's ${nextMeta.title} to tighten your score</button>
       <button type="button" class="pv-pill-btn pv-ghost" id="stop-here">I'm happy with this estimate</button>
     `;
   app.innerHTML = pvShell("Results", "result"+partNumber, body, footer)
@@ -1105,6 +1448,127 @@ function renderResult(partNumber){
 }
 
 /* ---------- Completion page (page 3) ---------- */
+
+/* Food-type choices differ by species, not just in which options exist but
+   in what matters about each one - shown as two separate lists (never one
+   merged dropdown) so a cat owner never sees dog-specific framing or vice
+   versa. Descriptive only (foodType itself doesn't feed any score). */
+const FOOD_TYPE_OPTIONS = {
+  dog: [
+    {v:"kibble", label:"Dry kibble"},
+    {v:"wet", label:"Wet/canned food"},
+    {v:"raw", label:"Raw or fresh"},
+    {v:"homemade", label:"Homemade"},
+    {v:"mixed", label:"Mixed (kibble + wet, etc.)"},
+  ],
+  cat: [
+    {v:"kibble", label:"Dry kibble"},
+    {v:"wet", label:"Wet/canned food"},
+    {v:"raw", label:"Raw or fresh"},
+    {v:"homemade", label:"Homemade"},
+    {v:"mixed", label:"Mixed (kibble + wet, etc.)"},
+  ],
+};
+const FOOD_TYPE_HINT = {
+  dog: "Formula (puppy/adult/senior, breed-size-specific, or a joint/weight-management line) tends to matter more for dogs than the wet-vs-dry split alone.",
+  cat: "Cats have a naturally low thirst drive, so more wet food in the mix is generally the bigger lever for hydration and urinary-tract health than for dogs.",
+};
+
+/* ---------- Food recommendation (completion page) ---------- */
+/* Every tag is a real, checkable signal already collected elsewhere in this
+   flow (life stage, size/breed, activity minutes vs. threshold, BCS,
+   flagged symptoms, stated health goals, clinical history) - nothing here
+   is a fabricated input. Recommends food *attributes to look for*
+   (formula type, not a brand/product), same wellness-not-diagnostic
+   framing as the rest of this app - a rule-based synthesis, not a trained
+   model. */
+function foodRecommendationTags(r){
+  const b = state.baseline;
+  const breed = (b.breed || "").toLowerCase();
+  const tags = new Set();
+
+  tags.add("stage:" + r.stageDisplay);
+
+  if (b.species === "dog") {
+    const size = dogSizeClass(weightKg());
+    if (size === "large" || size === "giant") tags.add("large-breed");
+  }
+
+  const gainedOrLost = state.details.appetite_weight_detail;
+  if (b.bcs <= 3 || gainedOrLost === "loss") tags.add("weight-gain-support");
+  if (r.overweightPct != null || gainedOrLost === "gain") tags.add("weight-management");
+
+  const chondro = CHONDRODYSTROPHIC_BREEDS.some(x => breed.includes(x));
+  if ((state.answers.mob_gate ?? 0) >= 0.5 || (state.answers.p3_exercise_tolerance ?? 0) >= 0.5 ||
+      (state.answers.p3_muscle ?? 0) >= 0.5 || chondro || r.stageDisplay === "senior") tags.add("joint-support");
+
+  if (state.details.coat_dental_skin_detail === "dental" || (state.answers.p4_dental_history ?? 0) >= 0.5) tags.add("dental");
+  if ((state.answers.p3_digestion ?? 0) >= 0.5) tags.add("gi-sensitive");
+  if ((state.answers.water_urination_continence_gate ?? 0) >= 0.5 || (state.answers.p4_organ_findings ?? 0) >= 0.5) tags.add("urinary-support");
+  if (b.species === "cat") tags.add("hydration-cat");
+  if (BRACHY_BREEDS.some(x => breed.includes(x))) tags.add("brachy-eating");
+
+  const rawMinutes = parseFloat(state.raw && state.raw.p1_activity);
+  const threshold = getActivityMinutesThreshold(b.species, weightKg(), b.breed);
+  if (Number.isFinite(rawMinutes)) {
+    if (rawMinutes >= threshold * 1.2) tags.add("high-energy");
+    else if (rawMinutes < threshold * 0.6) tags.add("low-energy-portion");
+  }
+
+  (b.healthGoals || []).forEach(g => {
+    if (g === "weight") tags.add("weight-management");
+    if (g === "joint") tags.add("joint-support");
+    if (g === "digestion") tags.add("gi-sensitive");
+    if (g === "anxiety") tags.add("feeding-routine");
+    if (g === "longevity") tags.add("longevity");
+  });
+
+  if ((state.answers.p4_diagnoses ?? 0) >= 0.5 || (state.answers.p4_medications ?? 0) >= 0.5) tags.add("vet-therapeutic-check");
+
+  return tags;
+}
+
+const FOOD_TAG_COPY = {
+  "stage:puppy": sp => sp === "cat" ? "A kitten-formula food - higher calorie/protein density to support growth." : "A puppy-formula food - higher calorie/protein density, and a large-breed puppy formula specifically if the large-breed note below applies.",
+  "stage:young": () => "An adult-maintenance formula suited to their current activity level.",
+  "stage:middle": () => "An adult-maintenance formula, watching label calorie density as metabolism naturally starts to slow.",
+  "stage:senior": sp => sp === "cat" ? "A senior/mature-cat formula, often with kidney-friendly moderated protein and phosphorus." : "A senior-formula food, typically lower-calorie with added joint-support ingredients.",
+  "large-breed": () => "A large- or giant-breed-specific formula - the controlled calcium/phosphorus ratio matters more for bigger dogs' joint development and long-term joint health.",
+  "weight-management": () => "A weight-management or \"light\" formula - lower calorie density to help bring body condition back toward ideal.",
+  "weight-gain-support": () => "A higher-calorie, nutrient-dense formula to help rebuild condition - worth a vet check first, since unexplained weight loss can have a medical cause.",
+  "joint-support": () => "A formula with added joint-support ingredients (glucosamine, chondroitin, omega-3 fatty acids).",
+  "dental": () => "A dental-formula kibble (larger kibble size/texture designed to reduce tartar) or a dental-specific line.",
+  "gi-sensitive": () => "A sensitive-stomach or limited-ingredient formula that's easier to digest.",
+  "urinary-support": sp => sp === "cat" ? "A urinary-support formula, alongside more wet food to help increase water intake." : "A urinary-support formula, if your vet's findings point that way.",
+  "hydration-cat": () => "More wet/canned food in the mix generally - cats have a low natural thirst drive, and moisture intake matters more for them than it does for dogs.",
+  "brachy-eating": () => "A slow-feed bowl or a kibble shape designed for short-nosed breeds, to cut down on air intake while eating.",
+  "high-energy": () => "A higher-calorie or performance-tier formula to match how active they actually are.",
+  "low-energy-portion": () => "Watch portion size closely on a standard formula - their activity is on the lower end for their size, so it's easy to overfeed relative to what they burn.",
+  "feeding-routine": () => "A consistent formula and feeding schedule rather than switching foods often - routine itself helps with the anxiety/stress goal you flagged.",
+  "longevity": () => "A quality-protein, antioxidant-rich formula - one of the more evidence-aligned levers for the longevity goal you flagged.",
+  "vet-therapeutic-check": () => "Worth asking your vet directly whether a prescription/therapeutic diet fits any of the conditions or medications already on record - that's a clinical call this can't make for you.",
+};
+const FOOD_TAG_ORDER = [
+  "vet-therapeutic-check", "stage:puppy", "stage:young", "stage:middle", "stage:senior",
+  "large-breed", "weight-management", "weight-gain-support", "joint-support", "dental",
+  "gi-sensitive", "urinary-support", "hydration-cat", "brachy-eating",
+  "high-energy", "low-energy-portion", "feeding-routine", "longevity",
+];
+
+function foodRecommendationHtml(r){
+  const b = state.baseline;
+  const name = b.name || "Your pet";
+  const tags = foodRecommendationTags(r);
+  const lines = FOOD_TAG_ORDER.filter(t => tags.has(t)).map(t => FOOD_TAG_COPY[t](b.species));
+  const weightStr = b.weightUnit === "kg" ? `${Math.round(weightKg())} kg` : `${Math.round(weightKg()/KG_PER_LB)} lbs`;
+  const factors = [b.species, b.breed || null, weightStr, `${r.stageDisplay} stage`].filter(Boolean).join(", ");
+  return `<div class="pv-card">
+    <div class="pv-insight-title">What to look for in their food</div>
+    <p class="pv-hint" style="margin:0 0 10px;">Based on everything so far for ${name} - ${factors}, activity, body condition, and today's flagged answers:</p>
+    <ul>${lines.map(l=>`<li>${l}</li>`).join("")}</ul>
+    <p class="pv-hint" style="margin-top:10px;margin-bottom:0;">General guidance on what to look for, not a specific product - always confirm with your vet before switching foods, especially for a diagnosed condition.</p>
+  </div>`;
+}
 
 function currentFoodActivityBalance(){
   const b = state.baseline, f = state.followup;
@@ -1198,34 +1662,33 @@ function renderComplete(){
 
     <div class="pv-card">
       <div class="pv-insight-title">Activity &amp; food</div>
-      <div class="pv-subrow">
-        <div class="pv-field">
-          <label>Exercise (min/day)</label>
-          <input type="number" id="f-exercise" min="0" step="5" value="${f.exerciseMinutes}">
-        </div>
-        <div class="pv-field">
-          <label>Meals per day</label>
-          <input type="number" id="f-meals" min="1" step="1" value="${f.mealsPerDay}">
-        </div>
+      <p class="pv-hint" style="margin-top:0;">Activity and food are the two levers you can adjust today, not just observe - small, consistent changes here tend to compound more than any single vet visit.</p>
+      <div class="pv-field">
+        <label>Exercise (min/day)</label>
+        <input type="number" id="f-exercise" min="0" step="5" value="${f.exerciseMinutes}">
+        <p class="pv-hint activity-guidance" id="activity-guidance-exercise" style="${activityGuidanceText(parseFloat(f.exerciseMinutes)).caution?'color:var(--pv-warn);':''}">${activityGuidanceText(parseFloat(f.exerciseMinutes)).text}</p>
       </div>
       <div class="pv-field">
         <label>What do they eat?</label>
         <select id="f-food-type" style="border:none;border-bottom:1.5px solid var(--pv-ash);background:transparent;font-family:var(--pv-font-display);font-size:18px;padding:6px 0;color:var(--pv-ink);">
           <option value="">Pick one</option>
-          <option value="kibble" ${f.foodType==='kibble'?'selected':''}>Dry kibble</option>
-          <option value="wet" ${f.foodType==='wet'?'selected':''}>Wet food</option>
-          <option value="raw" ${f.foodType==='raw'?'selected':''}>Raw or fresh</option>
-          <option value="homemade" ${f.foodType==='homemade'?'selected':''}>Homemade</option>
-          <option value="mixed" ${f.foodType==='mixed'?'selected':''}>Mixed</option>
+          ${FOOD_TYPE_OPTIONS[b.species].map(o=>`<option value="${o.v}" ${f.foodType===o.v?'selected':''}>${o.label}</option>`).join("")}
         </select>
+        <p class="pv-hint" id="food-type-hint">${FOOD_TYPE_HINT[b.species]}</p>
       </div>
       <div class="pv-field">
         <label>Portion size vs. what's recommended</label>
+        <p class="pv-hint">"Recommended" means the feeding guideline on ${name}'s own food label for their current weight - not a fixed universal amount that works the same for every ${b.species}.</p>
         ${followupOptRow("portionScore", [{v:0,label:"About right"},{v:0.5,label:"A bit more"},{v:1,label:"A lot more"}])}
       </div>
-      <div class="pv-field" style="margin-bottom:0;">
+      <div class="pv-field">
         <label>Treats &amp; extras</label>
         ${followupOptRow("treatsScore", [{v:0,label:"Rarely"},{v:0.5,label:"Sometimes"},{v:1,label:"Often"}])}
+      </div>
+      <div class="pv-field" style="margin-bottom:0;">
+        <label>Meals per day</label>
+        <input type="number" id="f-meals" min="1" step="1" value="${f.mealsPerDay}">
+        <p class="pv-hint" style="margin:0;">For your own reference only - meal frequency alone doesn't indicate over- or under-feeding without portion size, so it's not counted in the balance below.</p>
       </div>
       <div class="pv-divider">
         <div class="pv-insight-title" style="font-size:13px;text-transform:uppercase;color:var(--pv-blue);">Food &amp; activity balance</div>
@@ -1238,12 +1701,22 @@ function renderComplete(){
       </div>
     </div>
 
+    ${foodRecommendationHtml(r)}
+
+    ${watchOutSectionHtml()}
+
     <p class="pv-hint">Let's keep setting this up over time - extra assessments can be added later without redoing this setup.</p>
   `;
   app.innerHTML = pvShell("Profile", "complete", body, "")
     + `<p class="pv-footnote">Wellness estimate only. Not a diagnosis or life-expectancy prediction.</p>`;
 
-  document.getElementById("f-exercise").oninput = e=>{ state.followup.exerciseMinutes = e.target.value; updateBalanceUI(); };
+  document.getElementById("f-exercise").oninput = e=>{
+    state.followup.exerciseMinutes = e.target.value;
+    updateBalanceUI();
+    const g = activityGuidanceText(parseFloat(e.target.value));
+    const hint = document.getElementById("activity-guidance-exercise");
+    if (hint){ hint.textContent = g.text; hint.style.color = g.caution ? "var(--pv-warn)" : ""; }
+  };
   document.getElementById("f-meals").oninput = e=>{ state.followup.mealsPerDay = e.target.value; };
   document.getElementById("f-food-type").onchange = e=>{ state.followup.foodType = e.target.value; };
   app.querySelectorAll(".pv-segmented[data-field]").forEach(row=>{

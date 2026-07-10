@@ -160,6 +160,15 @@ const ACTIVITY_MINUTES_TABLE = {
   cat: 20,
 };
 
+/* ponytail: same tier as the rest of this table - no size/breed-stratified
+   public standard exists for "how much daily exercise is too much" either,
+   only general owner guidance to build up gradually and watch for
+   overexertion signs (heavy panting that doesn't recover, limping,
+   collapse). These multipliers of the existing target are illustrative
+   caution bands, not a clinical overexertion threshold. */
+const ACTIVITY_UPPER_RATIO_CAUTION = 2; // beyond ~2x the daily target starts reading as a caution zone
+const ACTIVITY_UPPER_RATIO_MAX = 3;     // beyond ~3x reads as a likely-overexertion flag
+
 /* Breed-specific overrides, keyed by lowercase substring, checked before the
    size-class default. Sourced from general breed-standard energy-level
    descriptions (AKC/breed-club characterizations of "high energy" vs
@@ -189,9 +198,20 @@ function scoreActivityMinutes(species, minutes, weightKg, breedText){
   if (minutes == null || isNaN(minutes)) return undefined;
   const threshold = getActivityMinutesThreshold(species, weightKg, breedText);
   const ratio = minutes / threshold;
+  if (ratio >= ACTIVITY_UPPER_RATIO_MAX) return 1;     // likely overexertion for this pet's size/species
+  if (ratio >= ACTIVITY_UPPER_RATIO_CAUTION) return 0.5; // more than usual - a caution zone, not yet flagged
   if (ratio >= 0.8) return 0;
   if (ratio >= 0.4) return 0.5;
   return 1;
+}
+
+/* Copy-facing companion to scoreActivityMinutes() - the actual minute
+   figures behind "target" and "safe maximum" guidance, so the UI can show a
+   real number instead of a vague warning. Same threshold table, just
+   exposed as a range instead of folded straight into a deficit score. */
+function activityGuidance(species, weightKg, breedText){
+  const target = getActivityMinutesThreshold(species, weightKg, breedText);
+  return {target, safeMax: Math.round(target * ACTIVITY_UPPER_RATIO_CAUTION)};
 }
 
 /* ---------- health multiplier (completion-page metric) ---------- */
@@ -380,9 +400,10 @@ const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // legacy fallb
 
 return {
   dogSizeClass, DOG_SENIOR_ONSET, lifeStage, lifeStageDisplay, PUPPY_CUTOFF_YEARS,
-  ageFraction, expectedFIContinuous, breedModifier, CHONDRODYSTROPHIC_BREEDS,
+  ageFraction, expectedFIContinuous, breedModifier, CHONDRODYSTROPHIC_BREEDS, BRACHY_BREEDS,
   estimatePhysiologicalAge, classifyDelta, scoreActivityMinutes, seniorGuessAge,
-  getActivityMinutesThreshold, ACTIVITY_BREED_OVERRIDES,
+  getActivityMinutesThreshold, ACTIVITY_BREED_OVERRIDES, activityGuidance,
+  ACTIVITY_UPPER_RATIO_CAUTION, ACTIVITY_UPPER_RATIO_MAX,
   overweightPercentile, fuseAge, deltaPercentOfAge, BCS_CHART,
   bandYears, fiZone, healthScore, healthMultiplier, foodActivityBalance,
   foodEquationMultiplier, foodBalancePercentile,
