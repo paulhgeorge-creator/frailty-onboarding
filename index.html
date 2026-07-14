@@ -224,7 +224,7 @@ const state = {
     yearsOnlyAge:"",
     bcs:5,
     photoFile:null, photoEstimate:null,
-    healthGoals:[], sleepHours:null, // captured by the pv-widget baseline; not yet wired into scoring - see README
+    healthGoals:[], sleepHours:null, // captured by the pv-widget baseline; deliberately unscored/display-only, not a gap - see README
   },
   answers:{}, // id -> score
   details:{}, // id -> informational-only detail answer (detailOnly questions) - never enters the FI denominator
@@ -726,15 +726,6 @@ function initPetVitalsWidget(root){
     '<circle cx="66" cy="42" r="2.6" fill="#000000"/><circle cx="84" cy="42" r="2.6" fill="#000000"/>' +
     '<path d="M73 48 L79 48 L76 52 Z" fill="#000000"/></svg>';
 
-  var CAR_SVG = '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg">' +
-    '<ellipse cx="120" cy="88" rx="95" ry="7" fill="#000000" opacity="0.15"/>' +
-    '<path d="M20 70 Q25 40 55 38 L85 38 Q95 20 130 20 L165 20 Q185 20 195 38 L215 40 Q225 45 225 60 L225 72 L20 72 Z" fill="#006eff" fill-opacity="0.4"/>' +
-    '<path d="M95 38 L120 38 L120 22 Q100 24 95 38 Z" fill="#fff8f1"/>' +
-    '<path d="M125 38 L160 38 L155 22 L133 22 Z" fill="#fff8f1"/>' +
-    '<circle cx="65" cy="75" r="14" fill="#000000"/><circle cx="65" cy="75" r="5" fill="#fff8f1"/>' +
-    '<circle cx="180" cy="75" r="14" fill="#000000"/><circle cx="180" cy="75" r="5" fill="#fff8f1"/>' +
-    '<rect x="20" y="68" width="205" height="4" fill="#000000"/></svg>';
-
   var headerIllos = q('[data-pv="header-illos"]');
   if(headerIllos){ headerIllos.innerHTML = DOG_SVG + CAT_SVG; }
   var dogSlot = q('[data-pv="icon-dog-slot"]');
@@ -961,6 +952,15 @@ function wirePetVitalsToState(root){
 function renderBaseline(){
   app.innerHTML = PV_WIDGET_HTML + `
     <div style="max-width:960px;margin:16px auto 0;">
+      <div class="pv-field" style="margin-bottom:12px;">
+        <label for="pv-photo" class="pv-hint">Optional: upload a photo for an age estimate (experimental - doesn't replace the questions below)</label>
+        <input type="file" id="pv-photo" accept="image/*">
+        <div class="pv-hint" id="pv-photo-status"></div>
+      </div>
+      <div class="pv-field" style="margin-bottom:12px;">
+        <label for="pv-meals" class="pv-hint">Meals per day</label>
+        <input type="number" id="pv-meals" min="1" step="1" value="${state.followup.mealsPerDay}">
+      </div>
       <button type="button" class="pv-pill-btn" id="pv-continue">Continue to body condition check</button>
     </div>
   `;
@@ -968,7 +968,29 @@ function renderBaseline(){
   initPetVitalsWidget(pvRoot);
   wirePetVitalsToState(pvRoot);
 
-  document.getElementById("pv-continue").onclick = ()=>{ state.step = "bcs"; render(); };
+  document.getElementById("pv-photo").onchange = e=>{
+    state.baseline.photoFile = e.target.files[0] || null;
+    document.getElementById("pv-photo-status").textContent = state.baseline.photoFile
+      ? `${state.baseline.photoFile.name} selected - analyzed when you continue`
+      : "";
+  };
+
+  document.getElementById("pv-meals").oninput = e=>{ state.followup.mealsPerDay = e.target.value; };
+
+  document.getElementById("pv-continue").onclick = async ()=>{
+    const b = state.baseline;
+    if (b.photoFile){
+      document.getElementById("pv-photo-status").textContent = "Analyzing photo...";
+      b.photoEstimate = await PawlAgeEstimator.estimateAgeFromPhoto(b.photoFile, {species: b.species});
+      // Photo provided: BCS chart step is skipped, body condition defaults to ideal (see README).
+      b.bcs = 5;
+      state.answers.p1_bcs = bcsToDeficit(5);
+      state.step = "part1";
+    } else {
+      state.step = "bcs";
+    }
+    render();
+  };
 }
 
 function renderBCS(){
@@ -1685,11 +1707,6 @@ function renderComplete(){
         <label>Treats &amp; extras</label>
         ${followupOptRow("treatsScore", [{v:0,label:"Rarely"},{v:0.5,label:"Sometimes"},{v:1,label:"Often"}])}
       </div>
-      <div class="pv-field" style="margin-bottom:0;">
-        <label>Meals per day</label>
-        <input type="number" id="f-meals" min="1" step="1" value="${f.mealsPerDay}">
-        <p class="pv-hint" style="margin:0;">For your own reference only - meal frequency alone doesn't indicate over- or under-feeding without portion size, so it's not counted in the balance below.</p>
-      </div>
       <div class="pv-divider">
         <div class="pv-insight-title" style="font-size:13px;text-transform:uppercase;color:var(--pv-blue);">Food &amp; activity balance</div>
         <div class="pv-bar"><div class="pv-bar-fill" id="balance-fill" style="width:${balance ?? 0}%"></div></div>
@@ -1717,7 +1734,6 @@ function renderComplete(){
     const hint = document.getElementById("activity-guidance-exercise");
     if (hint){ hint.textContent = g.text; hint.style.color = g.caution ? "var(--pv-warn)" : ""; }
   };
-  document.getElementById("f-meals").oninput = e=>{ state.followup.mealsPerDay = e.target.value; };
   document.getElementById("f-food-type").onchange = e=>{ state.followup.foodType = e.target.value; };
   app.querySelectorAll(".pv-segmented[data-field]").forEach(row=>{
     row.querySelectorAll(".pv-segment").forEach(o=>{
