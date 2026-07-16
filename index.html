@@ -349,13 +349,33 @@ function activeStageContent(){
    into the 4 actual per-round arrays renderPart()/idsForPart() consume.
    Falls back to the unmodified _BASE arrays when no stage content is active
    yet, so nothing regresses before baseline/age is known. */
+/* Every base question, by id, across all 4 rounds - lets a content file tell
+   an override (reword an existing question for this stage/species, keeping
+   its opts/dependsOn/scoring untouched) apart from a genuinely net-new item
+   (round-tagged, or an id this map has never seen). */
+const ALL_BASE_QUESTIONS_BY_ID = {};
+[PART1_CORE_BASE, PART2_BASE, PART3_BASE, PART4_BASE].forEach(arr => arr.forEach(q => { ALL_BASE_QUESTIONS_BY_ID[q.id] = q; }));
+
 function assembleActiveParts(){
   const content = activeStageContent();
   if (!content) return {part1:PART1_CORE_BASE, part2:PART2_BASE, part3:PART3_BASE, part4:PART4_BASE};
   const refIds = new Set(content.questions.filter(q => typeof q === "string"));
-  const netNew = content.questions.filter(q => typeof q === "object");
+  // An object entry is a text/hint OVERRIDE of an existing base question if
+  // it has no `round` tag and its id is already a real base question - the
+  // override merges onto the base object (opts/dependsOn/type/id untouched,
+  // so scoring is byte-identical to "the original calculations") and only
+  // swaps presentation fields like `text`/`hint`. Anything else (round-
+  // tagged, or an id the base set has never seen) is genuinely net-new.
+  const overridesById = {};
+  const netNew = [];
+  content.questions.forEach(q => {
+    if (typeof q !== "object") return;
+    if (q.round === undefined && ALL_BASE_QUESTIONS_BY_ID[q.id]) overridesById[q.id] = q;
+    else netNew.push(q);
+  });
+  function resolve(q){ return overridesById[q.id] ? {...q, ...overridesById[q.id]} : q; }
   function build(baseArr, roundNum){
-    const kept = baseArr.filter(q => refIds.has(q.id));
+    const kept = baseArr.filter(q => refIds.has(q.id) || overridesById[q.id]).map(resolve);
     const additions = netNew.filter(q => q.round === roundNum);
     return additions.concat(kept); // net-new items lead, same position their replaced id (mob_gate/p2_cognition) originally held
   }

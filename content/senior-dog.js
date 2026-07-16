@@ -32,7 +32,10 @@ const sources = [
 ];
 
 const questions = [
-  "mob_gate", "p1_activity", "p1_exhaustion", "p3_exercise_tolerance", "p3_muscle",
+  {id:"mob_gate", text:{both:"Any new stiffness getting up, reluctance on stairs, or a limp that's stuck around?"}},
+  "p1_activity", "p1_exhaustion",
+  {id:"p3_exercise_tolerance", text:{both:"Stopping to rest on normal walks, a new limp, or any swelling on a leg?"}},
+  {id:"p3_muscle", text:{both:"Noticeable muscle loss over the back or hind legs?"}},
   "p2_vision", "p2_hearing", "p2_sleep", "p2_interaction", "p1_vitality",
   {id:"cog_disorientation", round:2, text:{both:"Getting \"stuck\" in corners, doorways, or under furniture, staring blankly at walls, or seeming confused in familiar places?"}},
   {id:"cog_disorientation_detail", round:2, detailOnly:true, refines:"cog_disorientation", dependsOn:{id:"cog_disorientation", min:0.5},
@@ -41,9 +44,12 @@ const questions = [
   {id:"cog_house_soiling_detail", round:2, detailOnly:true, refines:"cog_house_soiling", dependsOn:{id:"cog_house_soiling", min:0.5},
     text:{both:"Is that a daily thing, or just occasional?"}, opts:[{v:0.5,label:"Occasional"},{v:1,label:"Daily"}]},
   {id:"cog_activity_change", round:2, text:{both:"New aimless pacing, wandering, or repetitive movements with no clear purpose?"}},
-  "appetite_weight_gate", "appetite_weight_detail",
-  "coat_dental_skin_gate", "coat_dental_skin_detail",
-  "water_urination_continence_gate", "water_detail",
+  {id:"appetite_weight_gate", text:{both:"Weight loss or a drop in appetite, or the opposite - weight gain as they've slowed down?"}},
+  "appetite_weight_detail",
+  {id:"coat_dental_skin_gate", text:{both:"A rougher or duller coat, new dental issues, or new lumps/skin changes?"}},
+  "coat_dental_skin_detail",
+  {id:"water_urination_continence_gate", text:{both:"Drinking, urinating, or having accidents more than usual - common early kidney/heart-related signs at this age?"}},
+  "water_detail",
   "p3_digestion", "p3_breathing", "temperature_pain_gate", "discomfort_detail",
   "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",

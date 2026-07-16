@@ -90,6 +90,25 @@ test("every string question-ref resolves to a real id.html question id", () => {
   }
 });
 
+test("every text-override object (no round tag) targets a real existing id.html question - catches typos that would silently become a fake net-new item", () => {
+  for (const f of FILES) {
+    for (const q of modules[f].questions) {
+      if (typeof q === "object" && q.round === undefined) {
+        assert.ok(REAL_INDEX_HTML_IDS.has(q.id), `${f}: override "${q.id}" doesn't match any real index.html id - typo, or missing round tag for a genuine net-new item?`);
+        assert.ok(q.text, `${f}: override "${q.id}" has no text - pointless override`);
+      }
+    }
+  }
+});
+
+test("no id is referenced twice (once as a plain string, once as an override) in the same file", () => {
+  for (const f of FILES) {
+    const ids = modules[f].questions.map(q => typeof q === "string" ? q : q.id);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    assert.equal(dupes.length, 0, `${f}: duplicate question id(s) ${dupes.join(", ")} - each id should appear once, either as a string ref or as an override, not both`);
+  }
+});
+
 test("every net-new question object has a unique id (within its own file) and a text field", () => {
   for (const f of FILES) {
     const seen = new Set();
@@ -104,10 +123,10 @@ test("every net-new question object has a unique id (within its own file) and a 
   }
 });
 
-test("net-new question ids never collide with an existing index.html id (would silently overwrite a real question)", () => {
+test("genuine net-new (round-tagged) question ids never collide with an existing index.html id (would silently overwrite a real question) - text overrides (no round tag) are expected to match one on purpose", () => {
   for (const f of FILES) {
     for (const q of modules[f].questions) {
-      if (typeof q === "object") {
+      if (typeof q === "object" && q.round !== undefined) {
         assert.ok(!REAL_INDEX_HTML_IDS.has(q.id), `${f}: net-new id "${q.id}" collides with a real index.html id`);
       }
     }

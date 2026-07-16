@@ -22,13 +22,18 @@ const sources = [
 ];
 
 const questions = [
-  "mob_gate", "p1_activity", "p1_exhaustion", "p3_exercise_tolerance", "p3_muscle",
+  "mob_gate", "p1_activity", "p1_exhaustion",
+  {id:"p3_exercise_tolerance", text:{both:"Avoids movement, hides, or tires quickly during play - more than usual?"}},
+  "p3_muscle",
   "p2_vision", "p2_hearing", "p2_sleep", "p2_interaction", "p1_vitality",
   "p2_cognition", "p2_cognition_detail",
-  "appetite_weight_gate", "appetite_weight_detail",
+  {id:"appetite_weight_gate", text:{both:"Weight gain, especially if activity has quietly dropped, or any appetite change?"}},
+  "appetite_weight_detail",
   "coat_dental_skin_gate", "coat_dental_skin_detail",
   "water_urination_continence_gate", "water_detail",
-  "p3_digestion", "p3_breathing", "temperature_pain_gate", "discomfort_detail",
+  "p3_digestion",
+  {id:"p3_breathing", text:{both:"New rapid or labored breathing, or a rare fainting episode?"}},
+  "temperature_pain_gate", "discomfort_detail",
   "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",
 ];

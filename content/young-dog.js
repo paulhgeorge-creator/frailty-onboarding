@@ -2,12 +2,14 @@
    UMD-style export, matching frailty-model.js - works as
    <script src="content/young-dog.js"> and via require() from Node tests.
 
-   `questions` entries are either a plain string (an existing PART1-4
-   question id from index.html that still applies at this life stage - the
-   loader resolves the string against those arrays rather than duplicating
-   the question object) or a full question object (net-new item, only used
-   where a stage specifically needed one - none for this stage, see
-   ceo-plans/2026-07-16-life-stage-breed-surveys.md).
+   `questions` entries are one of three things: a plain string (an existing
+   PART1-4 question id, unchanged text - the loader resolves it against those
+   arrays), an override object `{id, text}` (same id, so identical
+   opts/dependsOn/scoring - "the same calculations" - just reworded for this
+   stage/breed), or a full net-new question object (none needed for this
+   stage). Overrides below reword breathing/skin/weight questions toward
+   BOAS/brachycephalic-relevant framing and soften mob_gate away from
+   aging-decline language that doesn't fit a young dog.
 
    MECE note: p2_cognition/p2_cognition_detail are deliberately excluded -
    canine cognitive dysfunction is an age-related syndrome (Salvin et al.
@@ -26,12 +28,18 @@ const sources = [
 ];
 
 const questions = [
-  "mob_gate", "p1_activity", "p1_exhaustion", "p3_exercise_tolerance", "p3_muscle",
+  {id:"mob_gate", text:{both:"Any reluctance to keep up on runs or hikes, or stiffness after an active day?"}},
+  "p1_activity", "p1_exhaustion", "p3_exercise_tolerance", "p3_muscle",
   "p2_vision", "p2_hearing", "p2_sleep", "p2_interaction", "p1_vitality",
-  "appetite_weight_gate", "appetite_weight_detail",
-  "coat_dental_skin_gate", "coat_dental_skin_detail",
+  {id:"appetite_weight_gate", text:{both:"Weight creeping up now that growth has slowed but portions haven't, or any other appetite change?"}},
+  "appetite_weight_detail",
+  {id:"coat_dental_skin_gate", text:{both:"New skin-fold irritation, or dental tartar starting to build up?"}},
+  "coat_dental_skin_detail",
   "water_urination_continence_gate", "water_detail",
-  "p3_digestion", "p3_breathing", "temperature_pain_gate", "discomfort_detail",
+  "p3_digestion",
+  {id:"p3_breathing", text:{both:"Noisy or labored breathing, snoring, or reduced tolerance for heat and exercise?"}},
+  {id:"temperature_pain_gate", text:{both:"New sensitivity to heat, flinching when touched, or vocalizing?"}},
+  "discomfort_detail",
   "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",
 ];

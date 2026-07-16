@@ -18,11 +18,15 @@ const sources = [
 ];
 
 const questions = [
-  "mob_gate", "p1_activity", "p1_exhaustion", "p3_exercise_tolerance", "p3_muscle",
+  {id:"mob_gate", text:{both:"Any reluctance to jump, a hunched back, or sudden stiffness getting up?"}},
+  "p1_activity", "p1_exhaustion", "p3_exercise_tolerance",
+  {id:"p3_muscle", text:{both:"Visible loss of muscle over the back or hind legs, or dragging/wobbly rear legs?"}},
   "p2_vision", "p2_hearing", "p2_sleep", "p2_interaction", "p1_vitality",
   "p2_cognition", "p2_cognition_detail",
-  "appetite_weight_gate", "appetite_weight_detail",
-  "coat_dental_skin_gate", "coat_dental_skin_detail",
+  {id:"appetite_weight_gate", text:{both:"Weight gain as metabolism has quietly started slowing, or any change in appetite?"}},
+  "appetite_weight_detail",
+  {id:"coat_dental_skin_gate", text:{both:"Dental tartar or gum changes building up, or new lumps/skin changes?"}},
+  "coat_dental_skin_detail",
   "water_urination_continence_gate", "water_detail",
   "p3_digestion", "p3_breathing", "temperature_pain_gate", "discomfort_detail",
   "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
