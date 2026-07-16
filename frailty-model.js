@@ -128,6 +128,33 @@ function breedModifier(breedText){
   return Math.max(brachy, chondro);
 }
 
+/* ---------- breed-risk-note matching (life-stage survey content) ---------- */
+/* Selects which of a stage-content module's breedRiskNotes[] apply to a given
+   pet. Two match kinds: name-tag (brachycephalic/chondrodystrophic, reusing
+   the same substring-matched lists breedModifier() already uses above) and
+   weight-threshold (giant, reusing dogSizeClass() - there's no equivalent
+   giant-breed name list anywhere in this file; "giant" has only ever been a
+   weight-derived size class, not a breed tag, so this is genuinely new
+   matching logic layered on an existing function, not a second consumer of
+   an existing breed list). Falls back to a content file's own tagged
+   "generic" note(s) when a pet matches none of the specific tags, so a
+   mixed-breed/untagged pet never sees an empty breed-risk section. */
+function petBreedTags(species, breedText, weightKg){
+  const s = (breedText || "").toLowerCase();
+  const tags = [];
+  if (BRACHY_BREEDS.some(b => s.includes(b))) tags.push("brachycephalic");
+  if (CHONDRODYSTROPHIC_BREEDS.some(b => s.includes(b))) tags.push("chondrodystrophic");
+  if (species === "dog" && dogSizeClass(weightKg) === "giant") tags.push("giant");
+  return tags;
+}
+
+function matchBreedRiskNotes(species, breedText, weightKg, notes){
+  const tags = petBreedTags(species, breedText, weightKg);
+  const matched = (notes || []).filter(n => n.tags && n.tags.some(t => tags.includes(t)));
+  if (matched.length) return matched;
+  return (notes || []).filter(n => n.tags && n.tags.includes("generic"));
+}
+
 /* ---------- interim scoring model (isolated swap point) ---------- */
 
 function estimatePhysiologicalAge({species, chronAge, weightKg, breed, observedFI}){
@@ -401,6 +428,7 @@ const AGE_GUESS = {puppy:0.5, young:2, adult:5, senior_guess:8}; // legacy fallb
 return {
   dogSizeClass, DOG_SENIOR_ONSET, lifeStage, lifeStageDisplay, PUPPY_CUTOFF_YEARS,
   ageFraction, expectedFIContinuous, breedModifier, CHONDRODYSTROPHIC_BREEDS, BRACHY_BREEDS,
+  petBreedTags, matchBreedRiskNotes,
   estimatePhysiologicalAge, classifyDelta, scoreActivityMinutes, seniorGuessAge,
   getActivityMinutesThreshold, ACTIVITY_BREED_OVERRIDES, activityGuidance,
   ACTIVITY_UPPER_RATIO_CAUTION, ACTIVITY_UPPER_RATIO_MAX,

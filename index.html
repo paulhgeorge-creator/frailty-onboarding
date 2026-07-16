@@ -113,6 +113,16 @@
   .pv-insight-title{font-weight:400;font-size:15px;margin-bottom:10px;color:var(--pv-ink);}
   .pv-card ul{margin:0;padding-left:20px;}
   .pv-card li{font-size:14px;color:var(--pv-ink);margin-bottom:6px;line-height:1.4;}
+  /* Citation tooltip (cherry-pick #4) - a real inline <button>, not a bare
+     title-attribute hover, so it's keyboard/screen-reader reachable (design
+     review finding). Sized to sit inline after a li's text without pushing
+     it onto a new line or breaking the narrow-mobile-width budget already
+     fought once for the activity-level buttons. */
+  .pv-cite-btn{display:inline-block;border:1px solid var(--pv-blue);border-radius:999px;background:transparent;color:var(--pv-blue);font-size:11px;line-height:1;padding:2px 7px;margin-left:6px;cursor:pointer;vertical-align:middle;}
+  .pv-cite-btn:hover,.pv-cite-btn:focus-visible{opacity:.75;}
+  .pv-cite-pop{list-style:none;margin:6px 0 0;padding:8px 10px;background:var(--pv-cream);border:1px solid var(--pv-ash);border-radius:10px;font-size:12px;}
+  .pv-cite-pop li{margin-bottom:4px;}
+  .pv-cite-pop a{color:var(--pv-blue);}
   .pv-badge{display:inline-block;background:rgba(0,110,255,.08);color:var(--pv-blue);font-weight:400;font-size:13px;padding:6px 14px;border-radius:999px;margin-bottom:14px;}
   .pv-tone{font-size:13px;font-weight:500;color:var(--pv-ink);margin-top:6px;}
   .pv-bar{height:8px;border-radius:999px;background:var(--pv-ash);overflow:hidden;}
@@ -136,6 +146,12 @@
 
 <script src="frailty-model.js"></script>
 <script src="age-estimator.js"></script>
+<script src="content/young-dog.js"></script>
+<script src="content/middle-dog.js"></script>
+<script src="content/senior-dog.js"></script>
+<script src="content/young-cat.js"></script>
+<script src="content/middle-cat.js"></script>
+<script src="content/senior-cat.js"></script>
 <script>
 /* ---------- Data model ---------- */
 /* Deficit score: 0 absent, 0.5 mild, 1 severe/present.
@@ -147,7 +163,8 @@ const { lifeStage, lifeStageDisplay, fiZone, healthScore, healthMultiplier, food
         estimatePhysiologicalAge, scoreActivityMinutes, classifyDelta,
         bandYears, AGE_GUESS, overweightPercentile, fuseAge, deltaPercentOfAge,
         BCS_CHART, getActivityMinutesThreshold, activityGuidance,
-        dogSizeClass, CHONDRODYSTROPHIC_BREEDS, BRACHY_BREEDS } = window.FrailtyModel;
+        dogSizeClass, CHONDRODYSTROPHIC_BREEDS, BRACHY_BREEDS,
+        petBreedTags, matchBreedRiskNotes } = window.FrailtyModel;
 
 const KG_PER_LB = 0.45359237;
 
@@ -162,7 +179,12 @@ const SCALE3 = [
   {v:1,   label:"Yes, noticeably"},
 ];
 
-const PART1_CORE = [
+/* _BASE = the canonical/original question definitions - unchanged shape,
+   still the single source of truth for what each question looks like.
+   Stage-branched content (content/*.js) selects a subset of these by id
+   plus splices in net-new items (see assembleActiveParts() below); it never
+   duplicates or forks the question objects themselves. */
+const PART1_CORE_BASE = [
   {id:"mob_gate", system:"Mobility",
     text:{dog:"Any trouble with stairs or jumping into the car, or does your pet seem stiff/slow to get up after resting?",
           cat:"Any reluctance or trouble jumping to a favorite high perch, or does your pet seem stiff/slow to get up after resting?"}},
@@ -174,7 +196,7 @@ const PART1_CORE = [
   {id:"p3_muscle", text:{both:"Visible loss of muscle over the back or hind legs?"}, dependsOn:{id:"mob_gate", min:0.5}},
 ];
 
-const PART2 = [
+const PART2_BASE = [
   {id:"p2_vision", text:{both:"Bumping into things, or hesitant in dim light?"}},
   {id:"p2_hearing", text:{both:"Not responding to their name or familiar sounds?"}},
   {id:"p2_sleep", text:{both:"Restless nights, pacing, or a changed sleep schedule?"}},
@@ -186,7 +208,7 @@ const PART2 = [
     opts:[{v:0.5,label:"Occasional"},{v:1,label:"Daily"}]},
 ];
 
-const PART3 = [
+const PART3_BASE = [
   {id:"appetite_weight_gate", text:{both:"Any notable change in eating, or weight loss/gain over recent months?"}},
   {id:"appetite_weight_detail", detailOnly:true, dependsOn:{id:"appetite_weight_gate", min:0.5},
     text:{both:"Gained, or lost?"}, opts:[{v:"gain",label:"Gained"},{v:"loss",label:"Lost"},{v:"both",label:"Both, at different times"}]},
@@ -204,7 +226,7 @@ const PART3 = [
     text:{both:"Which one, mainly?"}, opts:[{v:"pain",label:"Touch/handling"},{v:"temperature",label:"Temperature sensitivity"},{v:"both",label:"Both"}]},
 ];
 
-const PART4 = [
+const PART4_BASE = [
   {id:"p4_diagnoses", text:{both:"How many ongoing conditions has a vet diagnosed?"}, opts:[{v:0,label:"None"},{v:0.5,label:"One"},{v:1,label:"Two or more"}]},
   {id:"p4_medications", text:{both:"How many daily medications right now?"}, opts:[{v:0,label:"None"},{v:0.5,label:"1–2"},{v:1,label:"3+"}]},
   {id:"p4_vet_visits", text:{both:"How often have vet visits been in the last 12 months?"}, opts:[{v:0,label:"Routine / annual"},{v:0.5,label:"A few times"},{v:1,label:"Frequent or urgent"}]},
@@ -298,18 +320,139 @@ function orderedDecisionLog(){
     .sort((a,b) => a.stepOrder - b.stepOrder);
 }
 
+/* ---------- life-stage x breed content loader ---------- */
+/* Picks the stage-species content module (window.PawlStageContent, loaded
+   from content/*.js) matching this pet's lifeStage()+species, once baseline
+   is known. Returns null before that (renderPart/idsForPart fall back to
+   the unmodified _BASE arrays in that case - same behavior as before this
+   feature existed). */
+function activeStageContent(){
+  const b = state.baseline;
+  if (!b || !b.species) return null;
+  const { years: age } = computeFinalAge();
+  if (age == null) return null;
+  const stage = lifeStage(b.species, age, weightKg());
+  const key = `${stage}-${b.species}`;
+  return (window.PawlStageContent && window.PawlStageContent[key]) || null;
+}
+
+/* Resolves a content module's `questions` array (string refs to _BASE ids,
+   or full net-new question objects tagged with which round they belong to)
+   into the 4 actual per-round arrays renderPart()/idsForPart() consume.
+   Falls back to the unmodified _BASE arrays when no stage content is active
+   yet, so nothing regresses before baseline/age is known. */
+function assembleActiveParts(){
+  const content = activeStageContent();
+  if (!content) return {part1:PART1_CORE_BASE, part2:PART2_BASE, part3:PART3_BASE, part4:PART4_BASE};
+  const refIds = new Set(content.questions.filter(q => typeof q === "string"));
+  const netNew = content.questions.filter(q => typeof q === "object");
+  function build(baseArr, roundNum){
+    const kept = baseArr.filter(q => refIds.has(q.id));
+    const additions = netNew.filter(q => q.round === roundNum);
+    return additions.concat(kept); // net-new items lead, same position their replaced id (mob_gate/p2_cognition) originally held
+  }
+  return {
+    part1: build(PART1_CORE_BASE, 1),
+    part2: build(PART2_BASE, 2),
+    part3: build(PART3_BASE, 3),
+    part4: build(PART4_BASE, 4),
+  };
+}
+
 /* Single source of truth for "which answer ids belong to round N" - shared by
    computeResult() (pools every round up to N for the overall FI) and
    categoryScore() (scopes to just round N for that round's own display score). */
 function idsForPart(partNumber){
   const scorable = q => !q.detailOnly;
+  const parts = assembleActiveParts();
   const idsByPart = {
-    1: PART1_CORE.filter(scorable).map(q=>q.id),
-    2: PART2.filter(scorable).map(q=>q.id),
-    3: PART3.filter(scorable).map(q=>q.id).concat(["p1_bcs"]),
-    4: PART4.filter(scorable).map(q=>q.id),
+    1: parts.part1.filter(scorable).map(q=>q.id),
+    2: parts.part2.filter(scorable).map(q=>q.id),
+    3: parts.part3.filter(scorable).map(q=>q.id).concat(["p1_bcs"]),
+    4: parts.part4.filter(scorable).map(q=>q.id),
   };
   return idsByPart[partNumber];
+}
+
+/* senior-cat's content swaps the single mob_gate question for 6 DJD-checklist
+   items (djd_run/jump_up/jump_down/stairs_up/stairs_down/chase) - mob_gate
+   itself becomes a DERIVED value (max of whichever of those 6 are answered)
+   so the 3 existing dependsOn:{id:"mob_gate"} consumers (p1_exhaustion,
+   p3_exercise_tolerance, p3_muscle) and the joint-support food-tag read keep
+   working unchanged. No-op (does nothing) for every other stage/species,
+   where mob_gate is still answered directly. */
+const DJD_ITEM_IDS = ["djd_run","djd_jump_up","djd_jump_down","djd_stairs_up","djd_stairs_down","djd_chase"];
+function recomputeDerivedMobGate(){
+  const answered = DJD_ITEM_IDS.map(id => state.answers[id]).filter(v => v !== undefined);
+  if (answered.length) state.answers.mob_gate = Math.max(...answered);
+}
+
+/* ---------- citation tooltip (cherry-pick #4) ---------- */
+/* First pass scoped to breed-risk/watchFor content only, not blanket
+   per-question coverage (narrowed during plan review). A real focusable
+   <button>, not a bare title-attribute hover - the design review flagged
+   that as unreachable by keyboard/screen-reader. Click-toggled on both
+   desktop and mobile (no separate hover-only affordance to diverge between
+   them); aria-describedby links the trigger to its popover for screen
+   readers. */
+function citationBadgeHtml(sourceIds, sources){
+  const list = (sourceIds || []).map(id => (sources || []).find(s => s.id === id)).filter(Boolean);
+  if (!list.length) return "";
+  const uid = "cite-" + list.map(s=>s.id).join("-").replace(/[^a-z0-9-]/gi, "");
+  const items = list.map(s => `<li><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a> (${s.author}, ${s.year})</li>`).join("");
+  return ` <button type="button" class="pv-cite-btn" aria-describedby="${uid}" data-cite-toggle="${uid}">Source${list.length>1?"s":""}</button>` +
+    `<ul class="pv-cite-pop" id="${uid}" hidden>${items}</ul>`;
+}
+// One delegated listener for every citation button on the page (registered
+// once, not per-render() call, since render() replaces app.innerHTML wholesale
+// and would otherwise pile up duplicate listeners on document).
+document.addEventListener("click", e => {
+  const trigger = e.target.closest("[data-cite-toggle]");
+  document.querySelectorAll(".pv-cite-pop").forEach(pop => {
+    if (trigger && pop.id === trigger.dataset.citeToggle) pop.hidden = !pop.hidden;
+    else if (!e.target.closest(".pv-cite-pop")) pop.hidden = true;
+  });
+});
+
+/* Matched breed-risk notes (from the active stage-species content module),
+   each rendered as watch-for text plus its citation badge if it has
+   sources. Shown once, on Round 1's "Watch out for" card (see
+   personalizedCategoryInsights below) - not repeated on every round, since
+   it's a stage-wide callout rather than a per-category one. */
+function matchedBreedRiskHtml(){
+  const content = activeStageContent();
+  if (!content) return [];
+  const b = state.baseline;
+  const notes = matchBreedRiskNotes(b.species, b.breed, weightKg(), content.breedRiskNotes);
+  return notes.map(n => n.text + citationBadgeHtml(n.sourceIds, content.sources));
+}
+
+/* ---------- stage-confirm moment (cherry-pick #5) ---------- */
+/* Zero-extra-click: folded into the existing BCS step (the first screen
+   after baseline, once species/breed/age/weight are known) as a badge +
+   one-liner, rather than its own wizard step - the user explicitly flagged
+   retention/streamlined-completion risk, so this must not add a screen.
+   Reuses STAGE_ICON/stageLabelText already built for the result page, so
+   the wording is consistent rather than a second, divergent copy of the
+   same idea. */
+function stageReasonText(stageDisplay, b){
+  if (stageDisplay === "senior" && b.species === "dog" && dogSizeClass(weightKg()) === "giant"){
+    return "giant breeds reach this stage earlier than smaller dogs";
+  }
+  const tags = petBreedTags(b.species, b.breed, weightKg());
+  if (tags.includes("brachycephalic")) return "flat-faced breeds carry some breed-typical traits worth watching from now on";
+  if (tags.includes("chondrodystrophic")) return "this breed type carries a breed-typical spinal-disc risk worth watching from now on";
+  return null;
+}
+function stageConfirmHtml(){
+  const b = state.baseline;
+  const { years: age } = computeFinalAge();
+  const stageDisplay = lifeStageDisplay(b.species, age, weightKg());
+  const stageText = stageLabelText(stageDisplay, b.species);
+  const reason = stageReasonText(stageDisplay, b);
+  const name = b.name || "Your pet";
+  return `<div class="pv-badge">${STAGE_ICON[stageDisplay]} ${stageText} stage</div>
+    <p class="pv-hint">${name} is in the ${stageText.toLowerCase()} stage${reason ? " - " + reason : ""}. That's why the questions ahead are tailored to this stage.</p>`;
 }
 
 /* Raw 0-1 deficit mean for one category - the same number healthScore()
@@ -985,6 +1128,7 @@ function renderBCS(){
   const name = b.name || "your pet";
   const body = `
     <p class="pv-eyebrow">A Whoop for the whole household</p>
+    ${stageConfirmHtml()}
     <h2 class="pv-headline">How's ${name}'s body condition?</h2>
     <p class="pv-hint">Compare against the chart below - ribs, waist, and profile are the tells, not the scale.</p>
     <div class="pv-card pv-card-center" data-img-hook="${cur.imageHook}">
@@ -1017,11 +1161,15 @@ function renderBCS(){
   document.getElementById("wiz-next").onclick = ()=>{ state.step="part1"; render(); };
 }
 
+/* No static `.items` here on purpose - which questions belong to each round
+   is now stage/breed-dependent (see assembleActiveParts()), so renderPart()
+   and idsForPart() both resolve it fresh each time rather than reading a
+   fixed array captured at module-init. */
 const PART_META = {
-  part1: {items:PART1_CORE, title:"Mobility & Energy", idx:0, num:1, key:"mobility"},
-  part2: {items:PART2, title:"Senses, Mind & Behavior", idx:1, num:2, key:"senses"},
-  part3: {items:PART3, title:"Body & Internal Health", idx:2, num:3, key:"body"},
-  part4: {items:PART4, title:"Medical & Vet History", idx:3, num:4, key:"history"},
+  part1: {title:"Mobility & Energy", idx:0, num:1, key:"mobility"},
+  part2: {title:"Senses, Mind & Behavior", idx:1, num:2, key:"senses"},
+  part3: {title:"Body & Internal Health", idx:2, num:3, key:"body"},
+  part4: {title:"Medical & Vet History", idx:3, num:4, key:"history"},
 };
 
 /* Why each category is worth answering, not just what it asks - shown once
@@ -1076,7 +1224,8 @@ function wireWizBack(step){
 
 function renderPart(key){
   const meta = PART_META[key];
-  const items = visibleItems(meta.items);
+  const parts = assembleActiveParts();
+  const items = visibleItems(parts[key]);
   const body = `
     <p class="pv-eyebrow">A Whoop for the whole household</p>
     <h2 class="pv-headline">${meta.title}</h2>
@@ -1090,7 +1239,7 @@ function renderPart(key){
   app.innerHTML = pvShell(meta.title, key, body, footer);
 
   const byId = {};
-  meta.items.forEach(q=>{ byId[q.id] = q; });
+  parts[key].forEach(q=>{ byId[q.id] = q; });
   app.querySelectorAll(".pv-segmented").forEach(row=>{
     const q = byId[row.dataset.qid];
     const opts = q.opts || SCALE3;
@@ -1107,6 +1256,7 @@ function renderPart(key){
         } else {
           state.answers[q.id] = val;
           logDecision(q.id, {category: meta.key, label: speciesText(q), selectedLabel: opts[i].label, score: val});
+          if (q.id.startsWith("djd_")) recomputeDerivedMobGate();
         }
         render();
       };
@@ -1346,6 +1496,10 @@ const CATEGORY_BEST_MATCH = {mobility: mobilityBestMatch, senses: sensesBestMatc
 function personalizedCategoryInsights(r, meta, partNumber){
   const cc = CATEGORY_CONTENT[meta.key];
   let watchFor = flaggedWatchFor(partNumber, cc.watchFor);
+  // Matched breed-risk notes (cherry-pick #1/#4) shown once, on Round 1 only -
+  // a stage-wide callout, not a per-category one, so it doesn't repeat on
+  // every round's card. Takes priority over the flagged-symptom list below.
+  if (partNumber === 1) watchFor = [...matchedBreedRiskHtml(), ...watchFor].slice(0,3);
   let recommendations = [CATEGORY_BEST_MATCH[meta.key](r), ...cc.recommendations].slice(0,3);
   if (r.zone.vet) watchFor = ["A few of today's answers are worth flagging to your vet soon", ...watchFor].slice(0,3);
   if (meta.key === "body" && r.overweightPct != null) recommendations = ["Body condition is the highest-impact lever right now - small portion and activity changes add up fast", ...recommendations].slice(0,3);

@@ -259,5 +259,41 @@ test("foodBalancePercentile: mirrors the balance score directly, no separate fab
   assert.equal(M.foodBalancePercentile(null), null);
 });
 
+/* ---------- 22. Breed-risk-note matching (life-stage survey content) ---------- */
+const RISK_NOTES = [
+  {tags:["brachycephalic"], text:"BOAS watch-out"},
+  {tags:["chondrodystrophic"], text:"IVDD watch-out"},
+  {tags:["giant"], text:"Giant-breed watch-out"},
+  {tags:["generic"], text:"General watch-out"},
+];
+test("petBreedTags: brachy + chondro breeds tag by name, unrelated breed tags nothing", () => {
+  assert.deepEqual(M.petBreedTags("dog", "French Bulldog", 12), ["brachycephalic"]);
+  assert.deepEqual(M.petBreedTags("dog", "Dachshund", 8), ["chondrodystrophic"]);
+  assert.deepEqual(M.petBreedTags("dog", "Mixed breed", 20), []);
+});
+test("petBreedTags: giant is weight-derived (dogSizeClass), not a breed-name list", () => {
+  assert.deepEqual(M.petBreedTags("dog", "Great Dane", 55), ["giant"]);
+  assert.deepEqual(M.petBreedTags("dog", "Chihuahua", 3), []);
+  assert.deepEqual(M.petBreedTags("cat", "Maine Coon", 9), [], "giant tag is dog-only");
+});
+test("petBreedTags: a breed can carry more than one tag (e.g. brachy + giant)", () => {
+  assert.deepEqual(M.petBreedTags("dog", "Bulldog", 45), ["brachycephalic", "giant"]);
+});
+test("matchBreedRiskNotes: returns the matching tagged note", () => {
+  const notes = M.matchBreedRiskNotes("dog", "French Bulldog", 12, RISK_NOTES);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].text, "BOAS watch-out");
+});
+test("matchBreedRiskNotes: zero-tag-match pet falls back to the generic note, never empty", () => {
+  const notes = M.matchBreedRiskNotes("dog", "Mixed breed", 20, RISK_NOTES);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].text, "General watch-out");
+});
+test("matchBreedRiskNotes: multi-tag pet can surface more than one note", () => {
+  const notes = M.matchBreedRiskNotes("dog", "Bulldog", 45, RISK_NOTES);
+  assert.equal(notes.length, 2);
+  assert.deepEqual(notes.map(n => n.text).sort(), ["BOAS watch-out", "Giant-breed watch-out"]);
+});
+
 console.log(failed ? `\n${failed} test(s) failed` : "\nAll tests passed");
 process.exit(failed ? 1 : 0);
