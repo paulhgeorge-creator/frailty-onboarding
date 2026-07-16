@@ -40,7 +40,7 @@ const questions = [
   {id:"p3_breathing", text:{both:"New rapid or labored breathing after only mild activity?"}},
   {id:"hcm_syncope", round:3, text:{both:"A rare fainting, sudden weakness, or collapse episode?"}},
   "temperature_pain_gate", "discomfort_detail",
-  "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
+  "p4_gate", "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",
   {id:"hcm_screening_history", round:4, text:{both:"Has a vet ever run an echocardiogram or genetic test for heart disease on this cat?"}, opts:[{v:0,label:"Yes, tested/screened"},{v:1,label:"No / not sure"}]},
 ];

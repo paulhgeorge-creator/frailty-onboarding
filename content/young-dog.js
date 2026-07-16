@@ -40,7 +40,7 @@ const questions = [
   {id:"p3_breathing", text:{both:"Noisy or labored breathing, snoring, or reduced tolerance for heat and exercise?"}},
   {id:"temperature_pain_gate", text:{both:"New sensitivity to heat, flinching when touched, or vocalizing?"}},
   "discomfort_detail",
-  "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
+  "p4_gate", "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",
 ];
 

@@ -307,13 +307,16 @@ function fiZone(fi){
   return {label:"Talk to your vet", vet:true};
 }
 
-/* 0-100 "health score" for a WHOOP-style badge - reuses fiZone's own FI
+/* 0-100 "Longevity Score" for a WHOOP-style badge - reuses fiZone's own FI
    breakpoints (0.12/0.24/0.4, the 0.24 one validated against a cited FI>0.25
    elevated-mortality-risk threshold - see README) rather than inventing a
-   second, competing scale. Piecewise-linear between them. */
-const HEALTH_SCORE_ANCHORS = [[0,100],[0.12,85],[0.24,65],[0.4,40],[0.6,15],[1,0]];
-function healthScore(fi){
-  const a = HEALTH_SCORE_ANCHORS;
+   second, competing scale. Piecewise-linear between them. Named
+   longevityScore() (not healthScore()) per product direction: "Health
+   Score" reads as clinical/diagnostic and creates liability exposure;
+   "Longevity Score" keeps the framing emotional/relatable. */
+const LONGEVITY_SCORE_ANCHORS = [[0,100],[0.12,85],[0.24,65],[0.4,40],[0.6,15],[1,0]];
+function longevityScore(fi){
+  const a = LONGEVITY_SCORE_ANCHORS;
   if (fi <= a[0][0]) return a[0][1];
   for (let i=0;i<a.length-1;i++){
     const [f0,s0]=a[i], [f1,s1]=a[i+1];
@@ -433,7 +436,7 @@ return {
   getActivityMinutesThreshold, ACTIVITY_BREED_OVERRIDES, activityGuidance,
   ACTIVITY_UPPER_RATIO_CAUTION, ACTIVITY_UPPER_RATIO_MAX,
   overweightPercentile, fuseAge, deltaPercentOfAge, BCS_CHART,
-  bandYears, fiZone, healthScore, healthMultiplier, foodActivityBalance,
+  bandYears, fiZone, longevityScore, healthMultiplier, foodActivityBalance,
   foodEquationMultiplier, foodBalancePercentile,
   catHumanEquivalent, dogHumanEquivalent, bcsToDeficit, AGE_GUESS,
   FRAILTY_MODEL_CONFIG, ACTIVITY_MINUTES_TABLE,

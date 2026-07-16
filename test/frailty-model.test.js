@@ -206,15 +206,15 @@ test("lifeStageDisplay: 1yo+ falls through to the existing 3-bucket lifeStage()"
   assert.equal(M.lifeStageDisplay("dog", 8, 65), M.lifeStage("dog", 8, 65));
 });
 
-/* ---------- 17. WHOOP-style health score reuses fiZone's own breakpoints ---------- */
-test("healthScore: anchored at fiZone's own breakpoints, monotonically decreasing", () => {
-  assert.equal(M.healthScore(0), 100);
-  assert.equal(M.healthScore(0.12), 85);
-  assert.equal(M.healthScore(0.24), 65);
-  assert.equal(M.healthScore(0.4), 40);
-  assert.ok(M.healthScore(0.24) < M.healthScore(0.12));
-  assert.ok(M.healthScore(0.4) < M.healthScore(0.24));
-  assert.ok(M.healthScore(1) >= 0);
+/* ---------- 17. WHOOP-style Longevity Score reuses fiZone's own breakpoints ---------- */
+test("longevityScore: anchored at fiZone's own breakpoints, monotonically decreasing", () => {
+  assert.equal(M.longevityScore(0), 100);
+  assert.equal(M.longevityScore(0.12), 85);
+  assert.equal(M.longevityScore(0.24), 65);
+  assert.equal(M.longevityScore(0.4), 40);
+  assert.ok(M.longevityScore(0.24) < M.longevityScore(0.12));
+  assert.ok(M.longevityScore(0.4) < M.longevityScore(0.24));
+  assert.ok(M.longevityScore(1) >= 0);
 });
 
 /* ---------- 18. Health multiplier - completion-page metric, distinct from age ---------- */

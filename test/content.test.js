@@ -21,7 +21,7 @@ const REAL_INDEX_HTML_IDS = new Set([
   "coat_dental_skin_gate", "coat_dental_skin_detail",
   "water_urination_continence_gate", "water_detail",
   "p3_digestion", "p3_breathing", "temperature_pain_gate", "discomfort_detail",
-  "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
+  "p4_gate", "p4_diagnoses", "p4_medications", "p4_vet_visits", "p4_dental_history",
   "p4_surgical_history", "p4_bloodwork", "p4_organ_findings", "p4_owner_concern",
 ]);
 
