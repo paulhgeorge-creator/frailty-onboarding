@@ -102,6 +102,11 @@
   /* supplemental components (not in the original widget - same language) */
   .pv-card{border:1.5px solid var(--pv-ash);border-radius:14px;padding:18px 20px;margin-bottom:16px;text-align:left;}
   .pv-card-center{text-align:center;}
+  /* Path-chooser cards are real <button>s (keyboard/screen-reader reachable,
+     same a11y bar as the citation tooltip) - reset the UA button chrome so
+     they read as cards, not system buttons. */
+  .pv-path-card{background:transparent;font-family:inherit;width:100%;cursor:pointer;display:block;}
+  .pv-path-card:hover,.pv-path-card:focus-visible{border-color:var(--pv-blue);}
   .pv-stat-row{display:flex;justify-content:center;gap:36px;margin-bottom:20px;flex-wrap:wrap;}
   .pv-stat-block{text-align:center;min-width:110px;}
   .pv-stat-label{font-weight:300;font-size:12px;text-transform:uppercase;color:var(--pv-blue);margin-bottom:2px;}
@@ -242,7 +247,7 @@ const PART4_BASE = [
 
 /* ---------- App state ---------- */
 const state = {
-  step:"baseline", // baseline -> bcs -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4 -> complete
+  step:"pathchooser", // pathchooser -> baseline -> bcs -> part1 -> result1 -> part2 -> result2 -> part3 -> result3 -> part4 -> result4 -> complete
   baseline:{
     species:"dog", name:"", breed:"",
     weightValue:44, weightUnit:"lb", // widget's weight field is lbs-only (no kg toggle in this UI) - 44lb ~= 20kg, same effective default as before
@@ -598,6 +603,7 @@ function pvShell(wordmark, step, bodyHtml, footerHtml){
 
 function render(){
   const s = state.step;
+  if (s === "pathchooser") return renderPathChooser();
   if (s === "baseline") return renderBaseline();
   if (s === "bcs") return renderBCS();
   if (s === "part1") return renderPart("part1");
@@ -1072,6 +1078,63 @@ function hydrateBaselineWidget(root){
   });
 }
 
+/* ---------- Path chooser (quick-start entry screen) ---------- */
+/* Lets someone jump straight into any of the 6 life-stage x breed survey
+   paths without filling in the baseline form by hand. Each preset sets real
+   baseline values (species/breed/weight/age) chosen so the actual
+   lifeStage()/computeFinalAge() pipeline lands in that exact stage - the
+   same values verified during manual QA of each path - not a separate fake
+   "pinned stage" mechanism. Nothing about scoring changes; this only
+   pre-fills the same fields the baseline widget would, then jumps straight
+   to the BCS step (skipping the manual data-entry screen). "Set up my own
+   pet" still goes to the unchanged original baseline form - nothing
+   removed, just a faster on-ramp added in front of it. */
+const PATH_PRESETS = [
+  {key:"young-dog", label:"Young Dog", exemplar:"French Bulldog", species:"dog", breed:"French Bulldog", age:2, weightLb:25, note:"BOAS/breathing watch-outs"},
+  {key:"middle-dog", label:"Middle-aged Dog", exemplar:"Dachshund", species:"dog", breed:"Dachshund", age:8, weightLb:20, note:"IVDD/spinal-disc watch-outs"},
+  {key:"senior-dog", label:"Senior Dog", exemplar:"Great Dane", species:"dog", breed:"Great Dane", age:6, weightLb:130, note:"cognition module + cancer watch-outs"},
+  {key:"young-cat", label:"Young Cat", exemplar:"Persian", species:"cat", breed:"Persian", age:3, weightLb:9, note:"PKD screening watch-outs"},
+  {key:"middle-cat", label:"Middle-aged Cat", exemplar:"Maine Coon", species:"cat", breed:"Maine Coon", age:9, weightLb:15, note:"HCM screening watch-outs"},
+  {key:"senior-cat", label:"Senior Cat", exemplar:null, species:"cat", breed:"Domestic Shorthair", age:15, weightLb:10, note:"DJD mobility checklist + organ-decline watch-outs"},
+];
+
+function applyPathPreset(preset){
+  Object.assign(state.baseline, {
+    species: preset.species, name:"", breed: preset.breed,
+    weightValue: preset.weightLb, weightUnit:"lb",
+    sexNeuter:"male-neutered",
+    dobKnown:false, dobMonth:"", dobDay:"", dobYear:"", yearsOnlyAge: String(preset.age),
+    bcs:5, photoFile:null, photoEstimate:null, bcsSkippedByPhoto:false, healthGoals:[],
+  });
+  // Fresh start for this preset - a previous path's answers shouldn't bleed
+  // into a newly-chosen one if someone tries a second path in the same tab.
+  state.answers = {}; state.details = {}; state.decisionLog = {};
+  state.decisionStepCounter = 0; state.resultHistory = {};
+  state.step = "bcs";
+}
+
+function renderPathChooser(){
+  const body = `
+    <p class="pv-eyebrow">A Whoop for the whole household</p>
+    <h2 class="pv-headline">Try a survey path</h2>
+    <p class="pv-hint">Each path pre-fills a representative pet for that life stage and breed, then goes straight into the same survey - same BCS step, same 4 rounds, same scoring, same dev breakdown. Only the questions and breed-risk content differ.</p>
+    <div class="pv-grid">
+      ${PATH_PRESETS.map((p,i) => `
+        <button type="button" class="pv-card pv-card-center pv-path-card" data-path-idx="${i}">
+          <div style="font-weight:500;font-size:16px;">${p.label}${p.exemplar ? ` (${p.exemplar})` : ""}</div>
+          <div class="pv-hint" style="margin:4px 0 0;">${p.note}</div>
+        </button>
+      `).join("")}
+    </div>
+    <p class="pv-hint" style="margin-top:16px;text-align:center;"><a href="#" id="manual-setup-link">Or set up your own pet manually</a></p>
+  `;
+  app.innerHTML = pvShell("Choose a path", "pathchooser", body, "");
+  app.querySelectorAll("[data-path-idx]").forEach(btn=>{
+    btn.onclick = ()=>{ applyPathPreset(PATH_PRESETS[parseInt(btn.dataset.pathIdx)]); render(); };
+  });
+  document.getElementById("manual-setup-link").onclick = e=>{ e.preventDefault(); state.step="baseline"; render(); };
+}
+
 function renderBaseline(){
   app.innerHTML = PV_WIDGET_HTML + `
     <div style="max-width:960px;margin:16px auto 0;">
@@ -1193,6 +1256,7 @@ function visibleItems(items){
 // including the photo-upload BCS skip (see renderBaseline's #wiz-next).
 // null means "no Back target" (the first step).
 function prevStepFor(step){
+  if (step === "baseline") return "pathchooser";
   if (step === "bcs") return "baseline";
   if (step === "part1") return state.baseline.bcsSkippedByPhoto ? "baseline" : "bcs";
   if (step === "result1") return "part1";
