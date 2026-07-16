@@ -79,6 +79,7 @@
   .pv-scale-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--pv-muted);margin-top:4px;text-transform:uppercase;}
 
   .pv-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:20px clamp(18px,3vw,40px);border-top:1.5px solid var(--pv-ash);}
+  .pv-wiz-nav{display:flex;align-items:center;gap:12px;margin-left:auto;}
   .pv-pill-btn{
     border:1.5px solid var(--pv-blue);border-radius:var(--pv-radius-pill);background:transparent;color:var(--pv-blue);
     font-family:var(--pv-font-body);font-weight:300;font-size:15px;letter-spacing:-0.02em;padding:13px 38px;
@@ -117,6 +118,10 @@
   .pv-bar{height:8px;border-radius:999px;background:var(--pv-ash);overflow:hidden;}
   .pv-bar-fill{height:100%;background:var(--pv-blue);border-radius:999px;transition:width .2s;}
   .pv-bar-copy{font-size:13px;color:var(--pv-muted);margin-top:6px;}
+  .pv-bar.pv-current{outline:1.5px solid var(--pv-blue);outline-offset:2px;}
+  .pv-dev-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .pv-dev-table th,.pv-dev-table td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--pv-ash);white-space:nowrap;}
+  .pv-dev-table th{color:var(--pv-muted);font-weight:500;}
   .pv-divider{margin-top:14px;padding-top:14px;border-top:1.5px solid var(--pv-ash);}
   .pv-cta-row{display:flex;gap:10px;}
   .pv-footnote{color:var(--pv-muted);font-size:12px;text-align:center;margin-top:20px;}
@@ -223,11 +228,14 @@ const state = {
     dobKnown:true, dobMonth:"", dobDay:"", dobYear:"",
     yearsOnlyAge:"",
     bcs:5,
-    photoFile:null, photoEstimate:null,
-    healthGoals:[], sleepHours:null, // captured by the pv-widget baseline; deliberately unscored/display-only, not a gap - see README
+    photoFile:null, photoEstimate:null, bcsSkippedByPhoto:false,
+    healthGoals:[],
   },
   answers:{}, // id -> score
   details:{}, // id -> informational-only detail answer (detailOnly questions) - never enters the FI denominator
+  decisionLog:{}, // id -> {stepOrder, timestamp, category, label, selectedLabel, score} - the decision-visualization trail
+  decisionStepCounter:0,
+  resultHistory:{}, // partNumber -> {score, catScore, n, timestamp} - snapshot of that round's real result, cached for the trend chart
   followup:{
     exerciseMinutes:"", // seeded from p1_activity once the complete page first renders
     mealsPerDay:"",
@@ -275,6 +283,19 @@ function computeFinalAge(){
 
 function answeredScores(ids){
   return ids.map(id=>state.answers[id]).filter(v => v !== undefined);
+}
+
+// Decision-visualization trail: upsert-by-id (not append-only) so changing an
+// earlier answer updates that row in place at its original step position,
+// rather than growing a duplicate/stale entry.
+function logDecision(id, entry){
+  if (!state.decisionLog[id]) state.decisionLog[id] = {stepOrder: ++state.decisionStepCounter};
+  Object.assign(state.decisionLog[id], entry, {timestamp: Date.now()});
+}
+function orderedDecisionLog(){
+  return Object.entries(state.decisionLog)
+    .map(([id, d]) => ({id, ...d}))
+    .sort((a,b) => a.stepOrder - b.stepOrder);
 }
 
 /* Single source of truth for "which answer ids belong to round N" - shared by
@@ -345,7 +366,7 @@ function computeResult(partNumber){
   const overweightPct = overweightPercentile(species, state.baseline.bcs);
 
   return {
-    n, observedFI, center, delta, deltaCategory, chronAge: age, ageConfidence, breed,
+    n, observedFI, eFI, center, delta, deltaCategory, chronAge: age, ageConfidence, breed,
     low: Math.max(0.1, center-band), high: center+band,
     stage, stageDisplay, zone, score, multiplier, species, overweightPct,
     humanEq: species==="cat" ? catHumanEquivalent(center) : dogHumanEquivalent(center),
@@ -442,6 +463,7 @@ function render(){
   if (s === "part4") return renderPart("part4");
   if (s.startsWith("result")) return renderResult(parseInt(s.replace("result","")));
   if (s === "complete") return renderComplete();
+  if (s === "devbreakdown") return renderDevBreakdown();
 }
 
 
@@ -661,14 +683,6 @@ const PV_WIDGET_HTML = `
         </div>
       </div>
 
-      <div class="pv-field">
-        <label>Average sleep per day</label>
-        <div class="pv-slider-wrap">
-          <div class="pv-slider-value"><span data-pv="sleep-val">12</span>h</div>
-          <input type="range" data-pv="sleep" min="6" max="20" value="12" />
-        </div>
-      </div>
-
       <div class="pv-field" style="grid-column:1 / -1;">
         <label>Health goals to track</label>
         <div class="pv-chip-grid" data-pv="goals-group">
@@ -680,23 +694,6 @@ const PV_WIDGET_HTML = `
         </div>
       </div>
 
-    </div>
-  </div>
-
-  <div class="pv-footer">
-    <button type="button" class="pv-pill-btn" data-pv="submit">Build baseline</button>
-    <div class="pv-result" data-pv="result">
-      <div class="pv-result-ring-wrap">
-        <svg viewBox="0 0 56 56">
-          <circle class="pv-result-ring-bg" cx="28" cy="28" r="24"></circle>
-          <circle class="pv-result-ring-fg" data-pv="result-ring" cx="28" cy="28" r="24" stroke-dasharray="150.8" stroke-dashoffset="150.8"></circle>
-        </svg>
-        <div class="pv-result-num" data-pv="result-num">0</div>
-      </div>
-      <div class="pv-result-text">
-        <span class="pv-result-label">Vitality score</span>
-        <span class="pv-result-sub" data-pv="result-sub"></span>
-      </div>
     </div>
   </div>
 </section>
@@ -733,7 +730,7 @@ function initPetVitalsWidget(root){
   if(dogSlot) dogSlot.innerHTML = DOG_SVG;
   if(catSlot) catSlot.innerHTML = CAT_SVG;
 
-  var pvState = { petType:null, name:'', breed:'', age:'', weight:'', activity:null, sleep:12, goals:[] };
+  var pvState = { petType:null, name:'', breed:'', age:'', weight:'', activity:null, goals:[] };
 
   var typeDogBtn = q('[data-pv="type-dog"]');
   var typeCatBtn = q('[data-pv="type-cat"]');
@@ -765,16 +762,6 @@ function initPetVitalsWidget(root){
     });
   });
 
-  var sleepInput = q('[data-pv="sleep"]');
-  var sleepValEl = q('[data-pv="sleep-val"]');
-  if(sleepInput){
-    sleepInput.addEventListener('input', function(){
-      pvState.sleep = Number(sleepInput.value);
-      if(sleepValEl) sleepValEl.textContent = sleepInput.value;
-      updateProgress();
-    });
-  }
-
   var nameInput = q('[data-pv="name"]');
   var breedInput = q('[data-pv="breed"]');
   var ageInput = q('[data-pv="age"]');
@@ -805,55 +792,6 @@ function initPetVitalsWidget(root){
     var pct = done/total;
     if(navRing) navRing.style.strokeDashoffset = RING_CIRC*(1-pct);
     if(ringLabel) ringLabel.textContent = Math.round(pct*100)+'% complete';
-  }
-
-  function pulse(el){
-    if(!el) return;
-    el.style.opacity = 0.4;
-    setTimeout(function(){ el.style.opacity = 1; }, 150);
-  }
-
-  function computeScore(){
-    var score = 50;
-    if(pvState.activity==='low') score += 6;
-    if(pvState.activity==='moderate') score += 16;
-    if(pvState.activity==='high') score += 24;
-    score += Math.max(0, 10 - Math.abs(pvState.sleep-13));
-    score += pvState.goals.length*3;
-    return Math.max(40, Math.min(98, Math.round(score)));
-  }
-
-  var submitBtn = q('[data-pv="submit"]');
-  var resultBox = q('[data-pv="result"]');
-  var resultRing = q('[data-pv="result-ring"]');
-  var resultNum = q('[data-pv="result-num"]');
-  var resultSub = q('[data-pv="result-sub"]');
-  var RESULT_CIRC = 150.8;
-
-  if(submitBtn){
-    submitBtn.addEventListener('click', function(){
-      if(!pvState.petType){ pulse(q('.pv-toggle-row')); return; }
-      if(!pvState.activity){ pulse(q('[data-pv="activity-group"]')); return; }
-
-      var score = computeScore();
-      if(resultRing){
-        resultRing.style.strokeDashoffset = RESULT_CIRC;
-        requestAnimationFrame(function(){
-          resultRing.style.strokeDashoffset = RESULT_CIRC*(1-score/100);
-        });
-      }
-      var n = 0;
-      var step = Math.max(1, Math.round(score/20));
-      var timer = setInterval(function(){
-        n += step;
-        if(n>=score){ n = score; clearInterval(timer); }
-        if(resultNum) resultNum.textContent = n;
-      }, 20);
-      if(resultSub){
-        resultSub.textContent = (pvState.name||'Your pet') + "'s baseline is set - we'll track recovery, strain, and sleep from here.";
-      }
-      if(resultBox) resultBox.classList.add('pv-show');
-    });
   }
 
   updateProgress();
@@ -937,7 +875,7 @@ function wirePetVitalsToState(root){
   });
 
   // Captured for display/future use - no existing scoring dimension for
-  // sleep duration or stated health goals yet, so these don't feed the FI.
+  // stated health goals yet, so these don't feed the FI.
   root.querySelectorAll('[data-pv="goal"]').forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const val = btn.getAttribute("data-val");
@@ -945,8 +883,50 @@ function wirePetVitalsToState(root){
       if (idx > -1) b.healthGoals.splice(idx,1); else b.healthGoals.push(val);
     });
   });
-  const sleepEl = root.querySelector('[data-pv="sleep"]');
-  if (sleepEl) sleepEl.addEventListener("input", e=>{ b.sleepHours = Number(e.target.value); });
+}
+
+// The widget markup is remounted fresh (app.innerHTML = ...) every time
+// renderBaseline() runs, so hitting Back to return here would otherwise
+// silently blank out everything already entered. This restores DOM
+// values/selected-state from the real app state - additive only, doesn't
+// touch the widget's own pvState/functions (its own progress ring is
+// cosmetic and just re-syncs as fields are touched again).
+function hydrateBaselineWidget(root){
+  const b = state.baseline;
+
+  const typeDog = root.querySelector('[data-pv="type-dog"]');
+  const typeCat = root.querySelector('[data-pv="type-cat"]');
+  if (typeDog) typeDog.classList.toggle("pv-selected", b.species === "dog");
+  if (typeCat) typeCat.classList.toggle("pv-selected", b.species === "cat");
+
+  const nameEl = root.querySelector('[data-pv="name"]');
+  if (nameEl) nameEl.value = b.name || "";
+  const breedEl = root.querySelector('[data-pv="breed"]');
+  if (breedEl) breedEl.value = b.breed || "";
+  const ageEl = root.querySelector('[data-pv="age"]');
+  if (ageEl) ageEl.value = b.yearsOnlyAge || "";
+
+  const weightEl = root.querySelector('[data-pv="weight"]');
+  if (weightEl){
+    weightEl.value = b.weightValue || "";
+    weightEl.placeholder = b.weightUnit === "kg" ? "Weight (kg)" : "Weight (lbs)";
+  }
+  root.querySelectorAll('[data-pv="weight-unit"]').forEach(btn=>{
+    btn.classList.toggle("pv-selected", btn.getAttribute("data-val") === b.weightUnit);
+  });
+
+  // state.raw.p1_activity stores the chosen level's minutes value (see
+  // ACTIVITY_LEVEL_MINUTES above) - reverse-map it back to low/moderate/high.
+  const ACTIVITY_LEVEL_MINUTES = {low:15, moderate:35, high:60};
+  const activeMinutes = state.raw && state.raw.p1_activity;
+  const activeLevel = Object.keys(ACTIVITY_LEVEL_MINUTES).find(k => ACTIVITY_LEVEL_MINUTES[k] === activeMinutes);
+  root.querySelectorAll('[data-pv="activity"]').forEach(btn=>{
+    btn.classList.toggle("pv-selected", btn.getAttribute("data-val") === activeLevel);
+  });
+
+  root.querySelectorAll('[data-pv="goal"]').forEach(btn=>{
+    btn.classList.toggle("pv-selected", b.healthGoals.includes(btn.getAttribute("data-val")));
+  });
 }
 
 function renderBaseline(){
@@ -961,12 +941,14 @@ function renderBaseline(){
         <label for="pv-meals" class="pv-hint">Meals per day</label>
         <input type="number" id="pv-meals" min="1" step="1" value="${state.followup.mealsPerDay}">
       </div>
-      <button type="button" class="pv-pill-btn" id="pv-continue">Continue to body condition check</button>
     </div>
+    <div class="pv-footer">${wizNavHTML("baseline", "Continue to body condition check")}</div>
   `;
   const pvRoot = app.querySelector(".pv-root");
   initPetVitalsWidget(pvRoot);
   wirePetVitalsToState(pvRoot);
+  hydrateBaselineWidget(pvRoot);
+  wireWizBack("baseline");
 
   document.getElementById("pv-photo").onchange = e=>{
     state.baseline.photoFile = e.target.files[0] || null;
@@ -977,7 +959,7 @@ function renderBaseline(){
 
   document.getElementById("pv-meals").oninput = e=>{ state.followup.mealsPerDay = e.target.value; };
 
-  document.getElementById("pv-continue").onclick = async ()=>{
+  document.getElementById("wiz-next").onclick = async ()=>{
     const b = state.baseline;
     if (b.photoFile){
       document.getElementById("pv-photo-status").textContent = "Analyzing photo...";
@@ -985,8 +967,11 @@ function renderBaseline(){
       // Photo provided: BCS chart step is skipped, body condition defaults to ideal (see README).
       b.bcs = 5;
       state.answers.p1_bcs = bcsToDeficit(5);
+      logDecision("p1_bcs", {category:"body", label:"Body condition", selectedLabel:"5 - Ideal (defaulted, photo path)", score: state.answers.p1_bcs});
+      b.bcsSkippedByPhoto = true;
       state.step = "part1";
     } else {
+      b.bcsSkippedByPhoto = false;
       state.step = "bcs";
     }
     render();
@@ -1015,17 +1000,21 @@ function renderBCS(){
       <p class="pv-hint" style="margin-top:6px;">${cur.desc}</p>
     </div>
   `;
-  const footer = `<button type="button" class="pv-pill-btn" id="next-bcs">Continue</button>`;
+  const footer = wizNavHTML("bcs", "Continue");
   app.innerHTML = pvShell("Body Condition", "bcs", body, footer);
 
   document.getElementById("f-bcs").oninput = e=>{
     state.baseline.bcs = parseInt(e.target.value);
     state.answers.p1_bcs = bcsToDeficit(state.baseline.bcs);
+    const curEntry = chart.find(c=>c.bcs===state.baseline.bcs) || chart[4];
+    logDecision("p1_bcs", {category:"body", label:"Body condition", selectedLabel: `${state.baseline.bcs} - ${curEntry.label}`, score: state.answers.p1_bcs});
     render();
   };
   document.getElementById("bcs-chart-thumb").onclick = ()=> window.open(BCS_REFERENCE_CHARTS[b.species], "_blank");
   state.answers.p1_bcs = bcsToDeficit(state.baseline.bcs);
-  document.getElementById("next-bcs").onclick = ()=>{ state.step="part1"; render(); };
+  logDecision("p1_bcs", {category:"body", label:"Body condition", selectedLabel: `${state.baseline.bcs} - ${cur.label}`, score: state.answers.p1_bcs});
+  wireWizBack("bcs");
+  document.getElementById("wiz-next").onclick = ()=>{ state.step="part1"; render(); };
 }
 
 const PART_META = {
@@ -1052,6 +1041,39 @@ function visibleItems(items){
   return items.filter(q => !q.dependsOn || (state.answers[q.dependsOn.id] ?? 0) >= q.dependsOn.min);
 }
 
+// Wizard Back target for each step - mirrors the forward-navigation order,
+// including the photo-upload BCS skip (see renderBaseline's #wiz-next).
+// null means "no Back target" (the first step).
+function prevStepFor(step){
+  if (step === "bcs") return "baseline";
+  if (step === "part1") return state.baseline.bcsSkippedByPhoto ? "baseline" : "bcs";
+  if (step === "result1") return "part1";
+  if (step === "part2") return "result1";
+  if (step === "result2") return "part2";
+  if (step === "part3") return "result2";
+  if (step === "result3") return "part3";
+  if (step === "part4") return "result3";
+  if (step === "result4") return "part4";
+  return null;
+}
+
+// Shared Back+Next footer group, right-aligned - the wizard's consistent
+// bottom-right control pair. Back is always in the DOM (keeps footer layout
+// stable across steps) but hidden/disabled when there's no target.
+function wizNavHTML(step, nextLabel){
+  const prev = prevStepFor(step);
+  return `
+    <div class="pv-wiz-nav">
+      <button type="button" class="pv-pill-btn pv-ghost" id="wiz-back" ${prev ? "" : 'disabled style="visibility:hidden;"'}>Back</button>
+      <button type="button" class="pv-pill-btn" id="wiz-next">${nextLabel}</button>
+    </div>`;
+}
+function wireWizBack(step){
+  const prev = prevStepFor(step);
+  const btn = document.getElementById("wiz-back");
+  if (btn && prev) btn.onclick = ()=>{ state.step = prev; render(); };
+}
+
 function renderPart(key){
   const meta = PART_META[key];
   const items = visibleItems(meta.items);
@@ -1064,7 +1086,7 @@ function renderPart(key){
       ${items.map(q => questionBlock(q, q.opts)).join("")}
     </div>
   `;
-  const footer = `<button type="button" class="pv-pill-btn" id="next-part">See ${meta.num===1?"my estimate":"the sharpened estimate"}</button>`;
+  const footer = wizNavHTML(key, `See ${meta.num===1?"my estimate":"the sharpened estimate"}`);
   app.innerHTML = pvShell(meta.title, key, body, footer);
 
   const byId = {};
@@ -1077,9 +1099,14 @@ function renderPart(key){
         const val = opts[i].v;
         if (q.detailOnly){
           state.details[q.id] = val;
-          if (q.refines && val === 1) state.answers[q.refines] = 1; // "daily" bumps cognition to severe; "occasional" leaves the 0.5 gate answer as-is
+          if (q.refines && val === 1){
+            state.answers[q.refines] = 1; // "daily" bumps cognition to severe; "occasional" leaves the 0.5 gate answer as-is
+            const gateQ = byId[q.refines];
+            logDecision(q.refines, {category: meta.key, label: speciesText(gateQ), selectedLabel: opts[i].label + " (refined)", score: 1});
+          }
         } else {
           state.answers[q.id] = val;
+          logDecision(q.id, {category: meta.key, label: speciesText(q), selectedLabel: opts[i].label, score: val});
         }
         render();
       };
@@ -1090,7 +1117,12 @@ function renderPart(key){
       const raw = parseFloat(inp.value);
       state.raw = state.raw || {};
       state.raw[inp.dataset.qid] = isNaN(raw) ? undefined : raw;
-      state.answers[inp.dataset.qid] = scoreActivityMinutes(state.baseline.species, raw, weightKg(), state.baseline.breed);
+      const scored = scoreActivityMinutes(state.baseline.species, raw, weightKg(), state.baseline.breed);
+      state.answers[inp.dataset.qid] = scored;
+      if (!isNaN(raw)){
+        const q = byId[inp.dataset.qid];
+        logDecision(inp.dataset.qid, {category: meta.key, label: speciesText(q), selectedLabel: raw + " min/day", score: scored});
+      }
       // deliberately no render() here - re-rendering innerHTML on every
       // keystroke would blow away focus/cursor mid-typing (same reason
       // f-name/f-breed/f-weight above don't re-render either) - the guidance
@@ -1100,7 +1132,8 @@ function renderPart(key){
       if (hint){ hint.textContent = g.text; hint.style.color = g.caution ? "var(--pv-warn)" : ""; }
     };
   });
-  document.getElementById("next-part").onclick = ()=>{ state.step = "result"+meta.num; render(); };
+  wireWizBack(key);
+  document.getElementById("wiz-next").onclick = ()=>{ state.step = "result"+meta.num; render(); };
 }
 
 /* Aging-pace copy is percentage-based (delta as % of chronological age) per
@@ -1362,6 +1395,40 @@ function scoreRingColor(score){
   return "#c65a2e";
 }
 
+// Compact per-round chart, built entirely from numbers already shown
+// elsewhere on screen (r.score / catScore, both existing 0-100 display
+// values) - a trend layer over sanctioned numbers, nothing new exposed.
+function decisionChartHTML(partNumber, r, catScore){
+  const bars = [];
+  for (let p=1; p<=partNumber; p++){
+    const snap = state.resultHistory[p];
+    if (!snap) continue;
+    const isCurrent = p === partNumber;
+    bars.push(`
+      <div class="pv-field" style="margin-bottom:${p===partNumber?0:10}px;">
+        <div class="pv-bar-copy" style="margin:0 0 4px;">Round ${p}${isCurrent ? " (current)" : ""} - ${snap.score}/100</div>
+        <div class="pv-bar${isCurrent ? " pv-current" : ""}"><div class="pv-bar-fill" style="width:${snap.score}%;background:${scoreRingColor(snap.score)};"></div></div>
+      </div>`);
+  }
+  const prev = state.resultHistory[partNumber-1];
+  let trendText;
+  if (!prev){
+    trendText = "First checkpoint logged.";
+  } else {
+    const diff = r.score - prev.score;
+    if (diff === 0) trendText = "Held steady this round.";
+    else if (diff > 0) trendText = `Ticked up ${diff} point${diff===1?"":"s"} this round.`;
+    else trendText = `Ticked down ${Math.abs(diff)} point${diff===-1?"":"s"} this round.`;
+  }
+  return `
+    <div class="pv-card">
+      <div class="pv-insight-title">Your pet's picture so far</div>
+      ${bars.join("")}
+      <p class="pv-hint" style="margin-top:10px;">${trendText}${catScore != null ? ` This round scored ${catScore}/100 on its own.` : ""}</p>
+      <p class="pv-hint" style="margin:4px 0 0;">Built from ${r.n} answer${r.n===1?"":"s"} across ${partNumber} round${partNumber===1?"":"s"} so far.</p>
+    </div>`;
+}
+
 function renderResult(partNumber){
   const r = computeResult(partNumber);
   const name = state.baseline.name || "Your pet";
@@ -1379,12 +1446,20 @@ function renderResult(partNumber){
   // Rounds 1-3 show that round's own category card; round 4 keeps the
   // life-stage card since it's the synthesized overall takeaway.
   const { watch, help } = isLast ? personalizedInsights(r) : {watch:null, help:null};
-  const catScore = isLast ? null : categoryScore(partNumber);
+  // categoryScore() is computed for every round (incl. round 4) now, even
+  // though round 4's own card doesn't display it - the decision chart below
+  // shows it uniformly across all rounds.
+  const catScore = categoryScore(partNumber);
   const catInsights = isLast ? null : personalizedCategoryInsights(r, meta, partNumber);
   const ringColor = scoreRingColor(r.score);
   const scoreOffset = 150.8 * (1 - r.score/100);
   // Uncertainty is reflected in tone, not a raw confidence percentage.
   const ageSoftener = r.ageConfidence >= 0.9 ? "" : `<div class="pv-stat-note">Estimated - sharpens as you answer more</div>`;
+
+  // Snapshot this round's real, already-computed result so later rounds can
+  // show a trend against it - not a new calculation, just caching what
+  // computeResult()/categoryScore() already returned this render.
+  state.resultHistory[partNumber] = {score: r.score, catScore, n: r.n, timestamp: Date.now()};
 
   const body = `
     ${r.zone.vet ? `<div class="pv-warn-banner">${name}'s answers suggest it's worth a check-in with your vet soon. This isn't a diagnosis - just a nudge to get eyes on it.</div>` : ""}
@@ -1423,6 +1498,8 @@ function renderResult(partNumber){
     </div>
     ${r.species==="cat" ? `<p class="pv-italic-note">Feline estimate - the science here is still maturing, so this reads a touch less precise.</p>` : ""}
 
+    ${decisionChartHTML(partNumber, r, catScore)}
+
     ${isLast ? `
     <div class="pv-card">
       <div class="pv-insight-title">Watch out for</div>
@@ -1453,20 +1530,99 @@ function renderResult(partNumber){
 
     <p class="pv-hint">This combines their age, body condition, and today's answers - it gets sharper with each round (${r.n} observations so far).</p>
   `;
+  const stepId = "result"+partNumber;
   const footer = isLast
-    ? `<button type="button" class="pv-pill-btn" id="finish-setup">Finish setting up ${name}'s profile</button>`
-    : `
-      <button type="button" class="pv-pill-btn" id="next-round">Let's look into your pet's ${nextMeta.title} to tighten your score</button>
-      <button type="button" class="pv-pill-btn pv-ghost" id="stop-here">I'm happy with this estimate</button>
-    `;
-  app.innerHTML = pvShell("Results", "result"+partNumber, body, footer)
+    ? wizNavHTML(stepId, `Finish setting up ${name}'s profile`)
+    : `<button type="button" class="pv-pill-btn pv-ghost" id="stop-here">I'm happy with this estimate</button>`
+      + wizNavHTML(stepId, `Let's look into your pet's ${nextMeta.title} to tighten your score`);
+  app.innerHTML = pvShell("Results", stepId, body, footer)
     + `<p class="pv-footnote">Wellness estimate only. Not a diagnosis or life-expectancy prediction.</p>`;
+  wireWizBack(stepId);
   if (!isLast){
-    document.getElementById("next-round").onclick = ()=>{ state.step="part"+nextPart; render(); };
+    document.getElementById("wiz-next").onclick = ()=>{ state.step="part"+nextPart; render(); };
     document.getElementById("stop-here").onclick = ()=>{ state.step="complete"; render(); };
   } else {
-    document.getElementById("finish-setup").onclick = ()=>{ state.step="complete"; render(); };
+    document.getElementById("wiz-next").onclick = ()=>{ state.step="complete"; render(); };
   }
+}
+
+/* Developer breakdown - a gated, explicitly-technical view (reachable only
+   from the Result 4 page's own link) showing the real decision trail and
+   scoring internals that the consumer-facing pages deliberately keep soft
+   (see the "never a raw confidence percentage" product rule elsewhere in
+   this file/README). Not part of the wizard step sequence - no ring, no
+   Back/Next, just a single Close button back to result4. */
+function renderDevBreakdown(){
+  const r = computeResult(4);
+  const name = state.baseline.name || "Your pet";
+  const log = orderedDecisionLog();
+
+  const trailRows = log.map(d => `
+    <tr>
+      <td>${d.stepOrder}</td>
+      <td>${d.category}</td>
+      <td>${d.label}</td>
+      <td>${d.selectedLabel}</td>
+      <td>${d.score}</td>
+    </tr>`).join("");
+
+  const categoryRows = Object.values(PART_META).map(meta => {
+    const fi = categoryFI(meta.num);
+    const sc = categoryScore(meta.num);
+    return `
+    <tr>
+      <td>${meta.title}</td>
+      <td>${fi != null ? fi.toFixed(3) : "-"}</td>
+      <td>${sc != null ? sc : "-"}</td>
+    </tr>`;
+  }).join("");
+
+  const body = `
+    <p class="pv-eyebrow">Developer view</p>
+    <h2 class="pv-headline">${name}'s full decision breakdown</h2>
+    <p class="pv-hint">Every answer, in the order it was given, and the real scoring math that turned it into the result on the previous page. This is a technical view - the result page itself intentionally keeps this soft.</p>
+
+    <div class="pv-card">
+      <div class="pv-insight-title">Decision trail</div>
+      <div style="overflow-x:auto;">
+        <table class="pv-dev-table">
+          <thead><tr><th>Step</th><th>Category</th><th>Question</th><th>Selected answer</th><th>Score</th></tr></thead>
+          <tbody>${trailRows || `<tr><td colspan="5">No answers logged yet.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pv-card">
+      <div class="pv-insight-title">Category rollups</div>
+      <div style="overflow-x:auto;">
+        <table class="pv-dev-table">
+          <thead><tr><th>Category</th><th>Category FI (0-1)</th><th>Category score (0-100)</th></tr></thead>
+          <tbody>${categoryRows}</tbody>
+        </table>
+      </div>
+      <p class="pv-hint" style="margin-top:10px;">Categories are weighted equally: each answered category contributes one equal vote to the pooled observed FI below, regardless of how many questions it has - a category with 12 answered items and one with 5 count the same. There is no per-question numeric weight in this model.</p>
+    </div>
+
+    <div class="pv-card">
+      <div class="pv-insight-title">Aggregation</div>
+      <p class="pv-hint" style="margin:0;">Observed FI: <strong>${r.observedFI.toFixed(3)}</strong> - Expected FI for this pet's age/breed/size: <strong>${r.eFI.toFixed(3)}</strong> - Health Multiplier (observed &divide; expected): <strong>${r.multiplier.toFixed(2)}x</strong></p>
+    </div>
+
+    <div class="pv-card">
+      <div class="pv-insight-title">Final computed result</div>
+      <p class="pv-hint" style="margin:0;">Physiological age: <strong>${r.center.toFixed(2)} yrs</strong> - Delta from chronological age: <strong>${r.delta.toFixed(2)} yrs (${r.deltaCategory})</strong> - Zone: <strong>${r.zone.label}</strong> - Health Score: <strong>${r.score}/100</strong></p>
+    </div>
+  `;
+  const footer = `<button type="button" class="pv-pill-btn" id="close-dev-breakdown">Close</button>`;
+  app.innerHTML = `
+    <section class="pv-root">
+      <div class="pv-header">
+        <div class="pv-wordmark">Developer Breakdown - Pet Vitals</div>
+      </div>
+      <div class="pv-body">${body}</div>
+      <div class="pv-footer">${footer}</div>
+    </section>`;
+  document.getElementById("close-dev-breakdown").onclick = ()=>{ state.step="complete"; render(); };
 }
 
 /* ---------- Completion page (page 3) ---------- */
@@ -1659,6 +1815,7 @@ function renderComplete(){
     <div class="pv-badge">Profile complete</div>
     <h2 class="pv-headline">${name}'s profile is set up</h2>
     <p class="pv-hint" style="max-width:520px;">This is the start, not the finish - Pawl keeps refining ${name}'s picture as you add more over time. Extra assessments can be layered in later without redoing any of this.</p>
+    <button type="button" class="pv-pill-btn pv-ghost pv-small" id="open-dev-breakdown">View full decision breakdown (developer)</button>
 
     <div class="pv-card pv-card-center">
       <div class="pv-stat-label">Health Multiplier</div>
@@ -1744,6 +1901,7 @@ function renderComplete(){
     document.getElementById("wearable-status").textContent =
       "Wearable syncing isn't live yet - this button is ready for when it is. Everything above keeps working fine without it.";
   };
+  document.getElementById("open-dev-breakdown").onclick = ()=>{ state.step="devbreakdown"; render(); };
 }
 
 render();
